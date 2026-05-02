@@ -7,12 +7,40 @@ dependencies = [
     "uvicorn[standard]>=0.29",
 ]
 
+[project.optional-dependencies]
+# Dev tooling required by CI. ruff is the linter (lint-python job); pytest +
+# httpx (FastAPI TestClient backend) cover unit-python.
+dev = [
+    "pytest>=8",
+    "ruff>=0.6",
+    "httpx>=0.27",
+]
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["mmfp*"]
 
 [tool.pytest.ini_options]
 # Repo root should normally be on sys.path automatically via editable install.
+
+[tool.ruff]
+# Slice 1 baseline — start permissive, tighten later (P1: earn complexity).
+# We deliberately do NOT exclude `platform/` here: it is a stale __pycache__
+# remnant that contains no .py sources, so ruff finds nothing in it.
+line-length = 100
+target-version = "py312"
+extend-exclude = [
+    "ui/prototype",
+    ".venv",
+    "node_modules",
+    "playwright-report",
+    "test-results",
+]
+
+[tool.ruff.lint]
+# Default rule set: pycodestyle errors, pyflakes, isort. Add more as the
+# codebase matures; do not over-rule the walking skeleton.
+select = ["E", "F", "I"]
 
 [build-system]
 requires = ["setuptools>=68"]
