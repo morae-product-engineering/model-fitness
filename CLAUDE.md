@@ -11,10 +11,10 @@ The Morae Model Fitness Platform (MMFP). An internal Morae product that scores L
 This is **an assessment tool, not a deployment tool.** The platform records evidence and recommendations. It does not control runtime model selection in other products — those products read the recommendation and update their own configuration.
 
 Reference docs:
-- Product hypothesis: `docs/product-hypothesis.md`
-- Architectural approach: `docs/architectural-approach.md`
-- Architectural principles (P1–P10): `docs/principles.md`
-- Rubric reference (v0.1): `docs/rubric-reference.md`
+- Product hypothesis: `https://morae.atlassian.net/wiki/spaces/MLI/pages/213549111/Model+Fitness+Platform`
+- Architectural approach: `https://morae.atlassian.net/wiki/spaces/MLI/pages/218530029/MFP+Architecture`
+- Architectural principles (P1–P10): `https://morae.atlassian.net/wiki/spaces/MLI/pages/146571276/Architectural+Principles`
+- Rubric reference (v0.1): `https://morae.atlassian.net/wiki/spaces/MLI/pages/218628525/Model+Fitness+Rubric+-+Reference+Document`
 - Decisions: `ADRs/` (MADR format, one file per decision)
 
 The Jira epic is **MLI-104** in the `MLI` project at `morae.atlassian.net`. Sub-tasks have prompts written for AI execution; you will be given a sub-task to do, not asked to invent one.
@@ -48,7 +48,7 @@ When given a sub-task:
 1. **Read the sub-task description in full** via the Atlassian MCP, including its acceptance criteria. If anything is ambiguous, ask before starting work — do not guess.
 2. **Read the parent slice task** to understand what slice you're contributing to.
 3. **Check what already exists.** Run `tree -L 3` or equivalent. Don't recreate things that exist; don't break things you don't need to touch.
-4. **Make a branch.** Branch name from the sub-task: `slice-XX/<short-description>` (e.g. `slice-01/acceptance-test`).
+4. **Make a branch.** Branch name from the Jira sub-task ID: MLI-XXX/<short-description> (e.g. MLI-158/acceptance-test). The Jira ID is the unit of work; the slice context is recoverable from the parent task. Don't use slice-XX/... — older sub-task descriptions reference that pattern, but it's superseded by this rule.
 5. **Write the test first** if there isn't one already. The whole repo is built on TDD/ATDD. The acceptance test for a slice is written *before* the implementation. Unit tests are written *with* the code they test, not after.
 6. **Implement the smallest thing that makes the test pass.** Don't anticipate future needs (P1 — earn complexity).
 7. **Refactor only if you have a green test.** Refactoring without test coverage is editing.
