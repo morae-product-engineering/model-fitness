@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>MMFP — Model Fitness Platform</title>
+<link rel="stylesheet" href="assets/colors_and_type.css" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  body { margin: 0; background: var(--neutral-13); color: var(--neutral-1); }
+  *, *::before, *::after { box-sizing: border-box; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { background: var(--neutral-10); border-radius: 6px; border: 2px solid var(--neutral-13); }
+  ::-webkit-scrollbar-thumb:hover { background: var(--neutral-9); }
+  a { color: var(--neutral-1); text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--neutral-10); }
+  a:hover { color: var(--warm-red); text-decoration-color: var(--warm-red); }
+  input[type="range"] { height: 18px; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="data.jsx"></script>
+<script type="text/babel" src="primitives.jsx"></script>
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel" src="shell.jsx"></script>
+<script type="text/babel" src="scoreboard.jsx"></script>
+<script type="text/babel" src="editor.jsx"></script>
+<script type="text/babel" src="curator.jsx"></script>
+<script type="text/babel" src="history.jsx"></script>
+
+<script type="text/babel">
+const { useState, useEffect } = React;
+
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "showDrift": true,
+  "colorOn": true,
+  "density": "comfortable",
+  "startPage": "scoreboard"
+}/*EDITMODE-END*/;
+
+function App() {
+  const [tweaks, setTweak] = useTweaks(TWEAK_DEFAULTS);
+  const [page, setPage] = useState(tweaks.startPage || 'scoreboard');
+  const [product, setProduct] = useState(MMFP_PRODUCTS[0]);
+  const [toast, setToast] = useState(null);
+  const [rubricVersion, setRubricVersion] = useState(MMFP_INITIAL_RUBRIC_VERSION);
+  const [history, setHistory] = useState(MMFP_INITIAL_HISTORY);
+
+  useEffect(() => {
+    if (!['scoreboard', 'editor', 'curator', 'history'].includes(page)) setPage('scoreboard');
+  }, []);
+
+  // Restrict to active product (MLI). Other products are placeholders.
+  function selectProduct(p) {
+    if (p.status === 'soon') {
+      setToast(`${p.name} not yet onboarded — bootstrap with \`morae-fitness init ${p.id}\` (v0.2).`);
+      return;
+    }
+    setProduct(p);
+  }
+
+  function nowStamp() {
+    const d = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+
+  // Editor save → record history + bump version
+  function handleRubricSave({ version, tier, note }) {
+    setRubricVersion(version);
+    setHistory(h => [{
+      id: 'h-' + Date.now(),
+      kind: 'rubric_save', at: nowStamp(),
+      actor: 'wayne.palmer', version, tier, note,
+    }, ...h]);
+  }
+
+  // Scoreboard decisions → mutate runs in-memory + history entry
+  function handleDecision({ kind, candidate, tier, toRole, rationale }) {
+    const tierRuns = MMFP_RUNS[tier.id];
+    if (kind === 'promote') {
+      // demote whoever currently has that role
+      for (const cid in tierRuns) {
+        if (tierRuns[cid].role === toRole && cid !== candidate) {
+          tierRuns[cid].role = toRole === 'primary' ? 'fallback' : null;
+          if (tierRuns[cid].role === null) delete tierRuns[cid].role;
+        }
+      }
+      tierRuns[candidate] = {
+        ...tierRuns[candidate], status: 'approved', role: toRole,
+      };
+      delete tierRuns[candidate].reason;
+    } else if (kind === 'reject') {
+      tierRuns[candidate] = {
+        ...tierRuns[candidate], status: 'rejected', reason: 'Rejected by ARB · see rationale',
+      };
+      delete tierRuns[candidate].role;
+    } else if (kind === 'reinstate') {
+      tierRuns[candidate] = { ...tierRuns[candidate], status: 'eval' };
+      delete tierRuns[candidate].reason;
+      delete tierRuns[candidate].role;
+    }
+    setHistory(h => [{
+      id: 'h-' + Date.now(),
+      kind, at: nowStamp(), actor: 'wayne.palmer',
+      candidate, tier: tier.id, toRole, rationale,
+      runId: MMFP_LATEST_RUN.id,
+    }, ...h]);
+    const cand = MMFP_CANDIDATES.find(c => c.id === candidate);
+    const verbs = {
+      promote: toRole === 'primary' ? `Promoted ${cand.name} to Primary` : `Set ${cand.name} as Fallback`,
+      reject:  `Rejected ${cand.name}`,
+      reinstate: `${cand.name} returned to Under evaluation`,
+    };
+    setToast(`${verbs[kind]} · ${tier.code}. Logged to portfolio.yaml.`);
+  }
+
+  const tabs = [
+    { id: 'scoreboard', label: 'Scoreboard' },
+    { id: 'editor',     label: 'Editor' },
+    { id: 'curator',    label: 'Curator' },
+    { id: 'history',    label: 'History' },
+  ];
+
+  return (
+    <div style={{ minHeight: '100vh', background: 'var(--neutral-13)', display: 'flex', flexDirection: 'column' }}
+         data-screen-label={`MMFP · ${product.name} · ${page}`}>
+      <MmfpHeader product={product} onProduct={selectProduct}
+                  env="staging" runId={MMFP_LATEST_RUN.id}
+                  rubricVersion={rubricVersion} />
+      <TabNav active={page} onChange={setPage} items={tabs} />
+
+      <main style={{ flex: 1, overflow: 'auto' }}>
+        {page === 'scoreboard' && (
+          <Scoreboard tweaks={tweaks} product={product} rubricVersion={rubricVersion}
+                      onDecision={handleDecision}
+                      onPdf={() => setToast('Generating one-page ARB scorecard PDF…')} />
+        )}
+        {page === 'editor' && (
+          <Editor tweaks={tweaks} setToast={setToast} product={product}
+                  rubricVersion={rubricVersion} onSave={handleRubricSave} />
+        )}
+        {page === 'curator' && (
+          <Curator tweaks={tweaks} setToast={setToast} />
+        )}
+        {page === 'history' && (
+          <History history={history} product={product} colorOn={tweaks.colorOn} />
+        )}
+      </main>
+
+      <Toast message={toast} onDismiss={() => setToast(null)} />
+
+      <TweaksPanel title="Tweaks">
+        <TweakSection title="Display">
+          <TweakToggle label="Tier color-coding"
+            description="Warm spectrum (yellow → orange → red) by tier stake."
+            value={tweaks.colorOn} onChange={v => setTweak('colorOn', v)} />
+          <TweakToggle label="Drift indicators"
+            description="Production drift signals on rows + banner."
+            value={tweaks.showDrift} onChange={v => setTweak('showDrift', v)} />
+          <TweakRadio label="Table density" value={tweaks.density}
+            options={[{ value: 'comfortable', label: 'Comfortable' }, { value: 'dense', label: 'Dense' }]}
+            onChange={v => setTweak('density', v)} />
+        </TweakSection>
+        <TweakSection title="Demo flow">
+          <TweakSelect label="Open page"
+            value={page}
+            options={[
+              { value: 'scoreboard', label: 'Scoreboard' },
+              { value: 'editor',     label: 'Editor' },
+              { value: 'curator',    label: 'Curator' },
+              { value: 'history',    label: 'History' },
+            ]}
+            onChange={setPage} />
+          <TweakButton onClick={() => setToast('Re-fetching latest run from API…')}>
+            Refresh latest run
+          </TweakButton>
+        </TweakSection>
+      </TweaksPanel>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
