@@ -1,0 +1,333 @@
+# MMFP CI pipeline (MLI-162)
+#
+# Runs on every PR and on push to main. Seven jobs in three tiers:
+#
+#   tier 1 (parallel)        : lint-python, lint-typescript, unit-python, unit-typescript
+#   tier 2 (after tier 1)    : build-and-push  -> two images to ACR
+#   tier 3 (after tier 2)    : deploy-dev      -> two Container Apps in dev
+#   tier 4 (after tier 3)    : e2e             -> Playwright against deployed dev URL
+#
+# Auth: OIDC federated credential. No long-lived secrets. Pattern lifted from
+# .github/workflows/verify-oidc.yml (MLI-156).
+#
+# Open design questions answered in the MLI-162 summary comment:
+#   Q1 (create-or-update strategy) -> `az containerapp up`
+#   Q2 (Container App names)       -> ca-mmfp-{api,ui}-dev
+#   Q3 (UI -> API wiring)          -> external FQDN of the API, set as
+#                                     NEXT_PUBLIC_API_URL runtime env var on the
+#                                     UI Container App. Works because the
+#                                     scoreboard fetch is in a server component
+#                                     (runtime-read, not build-time-inlined).
+#                                     See deploy-dev step comments.
+
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Concurrency guard: a newer push to the same ref cancels in-flight runs.
+# Keeps the dev environment from being deployed by stale commits.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# Default permissions are read-only; jobs that need OIDC opt in explicitly.
+permissions:
+  contents: read
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Tier 1: lint + unit
+  # ---------------------------------------------------------------------------
+
+  lint-python:
+    name: Lint Python (ruff)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install ruff
+        run: pip install ".[dev]"
+
+      - name: ruff check
+        run: ruff check .
+
+  lint-typescript:
+    name: Lint TypeScript (next lint)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ui
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+
+      - run: npm ci
+      - run: npm run lint
+
+  unit-python:
+    name: Unit tests (pytest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install package + dev deps
+        run: pip install -e ".[dev]"
+
+      # Note: package was renamed platform/ -> mmfp/ — the path below is the
+      # current source root. Stale references to `pytest platform/` in older
+      # ticket text are wrong.
+      - name: pytest
+        run: pytest mmfp/
+
+  unit-typescript:
+    name: Unit tests (vitest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - run: npm ci
+      - run: npm test
+
+  # ---------------------------------------------------------------------------
+  # Tier 2: build and push images to ACR
+  # ---------------------------------------------------------------------------
+
+  build-and-push:
+    name: Build and push images
+    needs: [lint-python, lint-typescript, unit-python, unit-typescript]
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    outputs:
+      api_image: ${{ steps.tags.outputs.api_image }}
+      ui_image: ${{ steps.tags.outputs.ui_image }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: ACR login
+        run: az acr login --name ${{ vars.ACR_NAME }}
+
+      - name: Compute image tags
+        id: tags
+        run: |
+          set -euo pipefail
+          API_IMAGE="${{ vars.ACR_LOGIN_SERVER }}/mmfp-api:${{ github.sha }}"
+          UI_IMAGE="${{ vars.ACR_LOGIN_SERVER }}/mmfp-ui:${{ github.sha }}"
+          echo "api_image=${API_IMAGE}" >> "$GITHUB_OUTPUT"
+          echo "ui_image=${UI_IMAGE}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push mmfp-api
+        run: |
+          set -euo pipefail
+          API_IMAGE='${{ steps.tags.outputs.api_image }}'
+          # API Dockerfile expects repo root as build context (it COPYs both
+          # pyproject.toml and mmfp/).
+          docker build -t "${API_IMAGE}" -f mmfp/api/Dockerfile .
+          docker push "${API_IMAGE}"
+          if [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == "refs/heads/main" ]]; then
+            LATEST='${{ vars.ACR_LOGIN_SERVER }}/mmfp-api:latest'
+            docker tag "${API_IMAGE}" "${LATEST}"
+            docker push "${LATEST}"
+          fi
+
+      - name: Build and push mmfp-ui
+        run: |
+          set -euo pipefail
+          UI_IMAGE='${{ steps.tags.outputs.ui_image }}'
+          # UI Dockerfile expects ui/ as build context.
+          docker build -t "${UI_IMAGE}" -f ui/Dockerfile ui
+          docker push "${UI_IMAGE}"
+          if [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == "refs/heads/main" ]]; then
+            LATEST='${{ vars.ACR_LOGIN_SERVER }}/mmfp-ui:latest'
+            docker tag "${UI_IMAGE}" "${LATEST}"
+            docker push "${LATEST}"
+          fi
+
+  # ---------------------------------------------------------------------------
+  # Tier 3: deploy to Azure Container Apps (dev environment)
+  # ---------------------------------------------------------------------------
+
+  deploy-dev:
+    name: Deploy to dev
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    outputs:
+      mmfp_url: ${{ steps.deploy_ui.outputs.mmfp_url }}
+    env:
+      RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+      CAE: ${{ vars.AZURE_CONTAINER_APPS_ENV }}
+      API_APP: ca-mmfp-api-dev
+      UI_APP: ca-mmfp-ui-dev
+      API_IMAGE: ${{ needs.build-and-push.outputs.api_image }}
+      UI_IMAGE: ${{ needs.build-and-push.outputs.ui_image }}
+    steps:
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      # Q1 decision: `az containerapp up` is idempotent and handles
+      # create-on-first-run + update-on-subsequent in a single command. For
+      # Slice 1 dev that's the right level of complexity (P1 — earn complexity).
+      # Revisit when we need: per-revision traffic splits, custom probes,
+      # multiple env-specific config sets, or IaC-managed scale rules.
+      - name: Deploy mmfp-api
+        id: deploy_api
+        run: |
+          set -euo pipefail
+          az containerapp up \
+            --name "${API_APP}" \
+            --resource-group "${RG}" \
+            --environment "${CAE}" \
+            --image "${API_IMAGE}" \
+            --target-port 8000 \
+            --ingress external \
+            --registry-server '${{ vars.ACR_LOGIN_SERVER }}'
+          API_FQDN=$(az containerapp show \
+            --name "${API_APP}" --resource-group "${RG}" \
+            --query 'properties.configuration.ingress.fqdn' -o tsv)
+          echo "api_url=https://${API_FQDN}" >> "$GITHUB_OUTPUT"
+
+      # Q3 decision (and the load-bearing nuance): `NEXT_PUBLIC_*` is normally
+      # baked at build time by Next.js for client-bundle access. The Slice 1
+      # scoreboard fetch lives in a SERVER component (app/scoreboard/page.tsx),
+      # so process.env.NEXT_PUBLIC_API_URL is read at runtime in the Node
+      # container — runtime env vars work. Setting it on the Container App is
+      # sufficient for now.
+      #
+      # FOLLOW-UP (when first client component references the URL):
+      # client-bundle references resolve to the empty string baked at build
+      # time. Two options when that bites: (a) Docker --build-arg to pass the
+      # URL into `next build` (accept env-specific images); or (b) move to a
+      # runtime-fetched /config endpoint. Document in an ADR before the change.
+      - name: Deploy mmfp-ui
+        id: deploy_ui
+        run: |
+          set -euo pipefail
+          API_URL='${{ steps.deploy_api.outputs.api_url }}'
+          az containerapp up \
+            --name "${UI_APP}" \
+            --resource-group "${RG}" \
+            --environment "${CAE}" \
+            --image "${UI_IMAGE}" \
+            --target-port 3000 \
+            --ingress external \
+            --registry-server '${{ vars.ACR_LOGIN_SERVER }}' \
+            --env-vars "NEXT_PUBLIC_API_URL=${API_URL}"
+          UI_FQDN=$(az containerapp show \
+            --name "${UI_APP}" --resource-group "${RG}" \
+            --query 'properties.configuration.ingress.fqdn' -o tsv)
+          echo "mmfp_url=https://${UI_FQDN}" >> "$GITHUB_OUTPUT"
+
+      - name: Summarise deploy
+        run: |
+          {
+            echo "### Dev deploy"
+            echo ""
+            echo "- **API:** ${{ steps.deploy_api.outputs.api_url }}"
+            echo "- **UI:**  ${{ steps.deploy_ui.outputs.mmfp_url }}"
+            echo "- **Image (api):** \`${API_IMAGE}\`"
+            echo "- **Image (ui):**  \`${UI_IMAGE}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ---------------------------------------------------------------------------
+  # Tier 4: end-to-end test against the deployed dev environment
+  # ---------------------------------------------------------------------------
+
+  e2e:
+    name: E2E (Playwright)
+    needs: deploy-dev
+    runs-on: ubuntu-latest
+    # Don't fail the workflow on a deliberate-red e2e (the slice spec proves
+    # itself by going red first, then green once deploy wiring is correct).
+    # The job's own status still reflects pass/fail; this just keeps later
+    # housekeeping steps (artifact upload, TestRail link summary) running.
+    continue-on-error: false
+    env:
+      MMFP_URL: ${{ needs.deploy-dev.outputs.mmfp_url }}
+      TESTRAIL_URL: ${{ secrets.TESTRAIL_URL }}
+      TESTRAIL_USER: ${{ secrets.TESTRAIL_USER }}
+      TESTRAIL_API_KEY: ${{ secrets.TESTRAIL_API_KEY }}
+      TESTRAIL_PROJECT_ID: ${{ vars.TESTRAIL_PROJECT_ID }}
+      TESTRAIL_SUITE_SLICE_01: ${{ vars.TESTRAIL_SUITE_SLICE_01 }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Playwright
+        # Run from repo root so the testrail-reporter writes
+        # testrail-run-url.txt (it uses process.cwd()) at a path the next
+        # step can find. The reporter exits 0 even if TestRail is degraded.
+        run: npx playwright test
+
+      # Run regardless of test outcome so the TestRail link surfaces on red
+      # runs too. The reporter writes the file in the working directory; we
+      # search for it rather than hardcode in case a future config change
+      # moves the cwd.
+      - name: Append TestRail run URL to step summary
+        if: always()
+        run: |
+          set -euo pipefail
+          FILE=$(find . -maxdepth 3 -name testrail-run-url.txt -print -quit)
+          if [[ -n "${FILE:-}" && -s "${FILE}" ]]; then
+            URL=$(cat "${FILE}")
+            echo "TestRail run: ${URL}" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "_TestRail run URL not produced (reporter degraded or env vars missing)._" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload Playwright HTML report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          if-no-files-found: warn
+          retention-days: 14
