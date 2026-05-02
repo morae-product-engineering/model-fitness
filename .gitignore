@@ -4,3 +4,25 @@ playwright-report/
 blob-report/
 playwright/.cache/
 testrail-run-url.txt
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+dist/
+build/
+*.egg-info/
+*.egg
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+*.cover
+
+# Generated docs exports (tracked folder, gitignored content)
+docs/exports/*
+!docs/exports/.gitkeep

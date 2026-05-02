@@ -1,0 +1,1 @@
+Fitness configuration for the MLI product — the first consumer of the Morae Model Fitness Platform. Contains the MLI-specific rubric overrides, golden datasets organised by tier, and prompt templates used when invoking candidate models during an MLI matrix run. MLI is the reference implementation for how a consuming product integrates with the platform.

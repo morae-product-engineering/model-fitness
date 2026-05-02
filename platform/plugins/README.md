@@ -1,0 +1,1 @@
+Abstract base classes (ABCs) for the four P3 stable boundaries: `EvaluatorPlugin`, `BindingPlugin`, `ReporterPlugin`, and `SensorPlugin`. These interfaces are the contracts the platform makes to the outside world — their signatures must not change without explicit human approval; implementations behind them can evolve freely.

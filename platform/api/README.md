@@ -1,0 +1,1 @@
+FastAPI application — routers, request/response models, and dependency injection wiring. This layer translates HTTP concerns into calls on `platform/core/` domain objects and `platform/plugins/` implementations. It owns no business logic of its own; it is the HTTP boundary only.
