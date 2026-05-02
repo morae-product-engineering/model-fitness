@@ -32,17 +32,27 @@ workspace "Morae Model Fitness Platform" "MMFP scores LLM candidates against a v
         }
 
         # --- Person -> MMFP relationships ---
-
+        # Container-level: used in Container view.
         steward -> mmfp.ui "Adjusts rubric and reviews scorecards via"
         curator -> mmfp.ui "Curates datasets and annotates judge results via"
         viewer -> mmfp.ui "Views scorecards via"
 
-        # --- MMFP -> external relationships ---
+        # System-level: required for the dynamic view, which can only reference
+        # people and software systems (not containers).
+        steward -> mmfp "Kicks off matrix runs and reviews scorecards"
+        curator -> mmfp "Curates datasets and annotates judge results"
+        viewer -> mmfp "Views scorecards"
 
+        # --- MMFP -> external relationships ---
+        # Container-level: used in Container view.
         mmfp.api -> foundry "Invokes candidate LLMs during matrix runs" "HTTPS"
         consuming -> mmfp.api "Reads scorecards for production routing decisions" "HTTPS/JSON"
         mmfp.api -> langsmith "Posts traces for agent quality observability (planned, not yet wired)" "HTTPS"
         ci -> testrail "Posts e2e test results after each deployment" "HTTPS"
+
+        # System-level: used in dynamic view.
+        mmfp -> foundry "Invokes candidate LLMs during matrix runs" "HTTPS"
+        mmfp -> testrail "Posts e2e evidence after each run (via CI)" "HTTPS"
 
     }
 
@@ -58,14 +68,14 @@ workspace "Morae Model Fitness Platform" "MMFP scores LLM candidates against a v
             autoLayout lr
         }
 
-        # MatrixRun: sequence from Steward kicking off a run through to TestRail evidence posting.
-        # CI->TestRail step is included because it is the observable close of the run lifecycle.
+        # MatrixRun: system-level flow from Steward triggering a run through to scorecard delivery.
+        # Container-level detail (UI->API->DB) lives in the Container view, not here.
+        # dynamic * scopes to software systems and people only — no containers allowed.
         dynamic * "MatrixRun" "How a matrix run flows from trigger to evidence." {
-            steward -> mmfp.ui "Kicks off matrix run"
-            mmfp.ui -> mmfp.api "POSTs run request"
-            mmfp.api -> foundry "Invokes candidate LLM"
-            mmfp.api -> mmfp.db "Persists run result"
-            ci -> testrail "Posts e2e evidence to TestRail"
+            steward -> mmfp "Kicks off matrix run via UI"
+            mmfp -> foundry "Invokes candidate LLM"
+            mmfp -> testrail "Posts e2e evidence after run"
+            mmfp -> steward "Returns scorecard"
             autoLayout lr
         }
 
