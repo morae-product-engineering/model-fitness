@@ -9,14 +9,10 @@ dependencies = [
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["platform*"]
+include = ["mmfp*"]
 
 [tool.pytest.ini_options]
-# Repo root must be on sys.path so pytest can resolve the `platform` namespace
-# package. Python 3.13 silently skips .pth files whose names start with "__",
-# which breaks the editable-install meta-path hook on 3.13 only; PYTHONPATH is
-# the workaround until a compatible setuptools editable format lands.
-pythonpath = ["."]
+# Repo root should normally be on sys.path automatically via editable install.
 
 [build-system]
 requires = ["setuptools>=68"]
