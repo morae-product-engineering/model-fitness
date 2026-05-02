@@ -1,0 +1,1054 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>MMFP — Print</title>
+<link rel="stylesheet" href="assets/colors_and_type.css" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: #fff; color: #0d0d0d;
+    font-family: 'Geist', system-ui, sans-serif; font-size: 11px; line-height: 1.4; }
+  .mono { font-family: 'Geist Mono', ui-monospace, monospace; }
+  .muted { color: #737373; }
+  .small { font-size: 10px; }
+  .strong { font-weight: 600; }
+  .center { text-align: center; }
+  .right { text-align: right; }
+  .left { text-align: left; }
+  a { color: inherit; }
+
+  @page { size: A4 portrait; margin: 14mm 12mm; }
+  @media print {
+    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
+
+  .page { break-after: page; padding-bottom: 8mm; }
+  .page:last-child { break-after: auto; }
+
+  .doc-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 0 10px; border-bottom: 1px solid #e6e6e6; margin-bottom: 14px;
+  }
+
+  .page-head { margin-bottom: 14px; }
+  .page-eyebrow { font-size: 9px; font-weight: 600; color: #737373;
+    letter-spacing: 0.4px; text-transform: uppercase; }
+  .page-head h1 { margin: 4px 0 4px; font-size: 22px; letter-spacing: -0.01em; font-weight: 600; }
+  .eyebrow { font-size: 9px; font-weight: 600; color: #737373;
+    letter-spacing: 0.4px; text-transform: uppercase; }
+  .section-h { font-size: 13px; font-weight: 600; margin: 16px 0 8px; letter-spacing: -0.005em; }
+
+  .chip {
+    display: inline-block; padding: 1px 6px; border-radius: 3px;
+    font-size: 9px; font-weight: 600; letter-spacing: 0.1px;
+    background: #f2f2f2; color: #262626;
+  }
+  .chip-mini { font-size: 9px; padding: 1px 5px; border-radius: 3px;
+    background: #f2f2f2; color: #595959; font-weight: 500; }
+  .chip-mini.ok { color: #03a649; background: #d7f4ea; }
+  .gate { font-size: 9px; padding: 1px 4px; border-radius: 2px;
+    background: #f2f2f2; color: #595959; font-weight: 600; font-family: 'Geist Mono', monospace; }
+
+  .tier-pill { display: inline-block; padding: 2px 6px; border-radius: 3px;
+    font-size: 9px; font-weight: 700; letter-spacing: 0.4px;
+    font-family: 'Geist Mono', monospace; }
+
+  .drift-banner {
+    background: #ffeecf; border: 1px solid #f0d690; border-radius: 6px;
+    padding: 8px 12px; margin-bottom: 12px; color: #5e4400; font-size: 10px;
+  }
+  .run-stats {
+    display: grid; grid-template-columns: repeat(6, 1fr);
+    border: 1px solid #e6e6e6; border-radius: 8px; overflow: hidden;
+    background: #fff; margin-bottom: 12px;
+  }
+  .run-stats > div { padding: 8px 10px; border-right: 1px solid #e6e6e6; }
+  .run-stats > div:last-child { border-right: none; }
+  .run-stats .stat { font-size: 12px; font-weight: 600; margin-top: 3px; }
+
+  /* tier card */
+  .tier-card {
+    border: 1px solid #e6e6e6; border-radius: 8px; overflow: hidden;
+    margin-bottom: 12px; background: #fff;
+    break-inside: avoid;
+  }
+  .tier-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 14px; gap: 14px;
+  }
+  .tier-title { font-size: 12px; font-weight: 600; }
+  .portfolio-row {
+    display: grid; grid-template-columns: 1.4fr 1fr 1fr 1fr;
+    border-top: 1px solid #e6e6e6;
+  }
+  .slot { padding: 10px 14px; border-left: 1px solid #e6e6e6; }
+  .slot:first-child { border-left: none; }
+  .slot-name { font-size: 12px; font-weight: 600; margin-top: 4px; }
+  .big-num { font-family: 'Geist Mono', monospace; font-size: 16px; font-weight: 600; }
+  .big-stat { font-size: 18px; font-weight: 600; margin-top: 4px; letter-spacing: -0.01em; }
+
+  /* scorecard table */
+  .scorecard { border-top: 1px solid #e6e6e6; padding: 8px 12px 12px; background: #f9f9f9; }
+  .scard-head { margin-bottom: 6px; }
+  .score-table {
+    width: 100%; border-collapse: collapse; font-size: 9.5px;
+    background: #fff; border: 1px solid #e6e6e6; border-radius: 6px; overflow: hidden;
+  }
+  .score-table th {
+    background: #f9f9f9; padding: 5px 6px; text-align: center;
+    font-size: 9px; font-weight: 600; color: #595959;
+    border-bottom: 1px solid #e6e6e6; border-right: 1px solid #f2f2f2;
+    vertical-align: bottom;
+  }
+  .score-table th.right { text-align: right; }
+  .score-table th.left { text-align: left; }
+  .score-table td {
+    padding: 5px 6px; border-bottom: 1px solid #f2f2f2; border-right: 1px solid #f2f2f2;
+    vertical-align: middle;
+  }
+  .score-table tr.rej td { background: rgba(217,52,23,0.04); }
+  .rej-reason { color: #d93417; font-size: 9px; margin-top: 2px; }
+
+  /* editor */
+  .tier-strip { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
+  .tier-strip-item {
+    display: flex; gap: 10px; align-items: center;
+    padding: 8px 12px; border: 1px solid #e6e6e6; border-radius: 6px;
+    background: #f9f9f9;
+  }
+  .tier-strip-item.active { background: #fff; border-color: #0d0d0d; }
+  .rubric-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .rubric-card { border: 1px solid #e6e6e6; border-radius: 8px; overflow: hidden; }
+  .rubric-head {
+    padding: 8px 12px; border-bottom: 1px solid #e6e6e6;
+    display: flex; align-items: center; justify-content: space-between;
+    background: #fff; font-size: 11px;
+  }
+  .rubric-row {
+    display: grid; grid-template-columns: 1fr 80px 40px;
+    gap: 10px; align-items: center; padding: 6px 12px;
+    border-bottom: 1px solid #f2f2f2; font-size: 10px;
+  }
+  .rubric-row:last-child { border-bottom: none; }
+  .weight-bar { height: 5px; background: #f2f2f2; border-radius: 3px; overflow: hidden; }
+  .weight-fill { height: 100%; background: #0d0d0d; }
+  .impact-stats {
+    display: grid; grid-template-columns: repeat(4, 1fr);
+    border: 1px solid #e6e6e6; border-radius: 8px; overflow: hidden;
+    background: #fff;
+  }
+  .impact-stats > div { padding: 10px 12px; border-right: 1px solid #e6e6e6; }
+  .impact-stats > div:last-child { border-right: none; }
+
+  /* curator */
+  .data-table {
+    width: 100%; border-collapse: collapse; font-size: 10px;
+    background: #fff; border: 1px solid #e6e6e6; border-radius: 6px; overflow: hidden;
+  }
+  .data-table th {
+    background: #f9f9f9; padding: 6px 8px; text-align: center;
+    font-size: 9px; font-weight: 600; color: #595959;
+    border-bottom: 1px solid #e6e6e6;
+  }
+  .data-table th.left { text-align: left; }
+  .data-table th.right { text-align: right; }
+  .data-table td { padding: 6px 8px; border-bottom: 1px solid #f2f2f2; vertical-align: middle; }
+  .data-table tbody tr:last-child td { border-bottom: none; }
+  .cov-row { display: flex; align-items: center; gap: 8px; min-width: 110px; }
+  .cov-wrap { flex: 1; height: 5px; background: #f2f2f2; border-radius: 3px; overflow: hidden; min-width: 60px; }
+  .cov-bar { height: 100%; }
+  .queue-stats {
+    display: grid; grid-template-columns: repeat(4, 1fr);
+    border: 1px solid #e6e6e6; border-radius: 8px;
+    background: #fff; margin: 14px 0;
+  }
+  .queue-stats > div { padding: 8px 12px; border-right: 1px solid #e6e6e6; }
+  .queue-stats > div:last-child { border-right: none; }
+  .queue-table tbody tr { break-inside: avoid; }
+
+  /* history */
+  .hist-panel { border: 1px solid #e6e6e6; border-radius: 8px; overflow: hidden; background: #fff; }
+  .hist-day-head {
+    padding: 6px 14px; background: #f9f9f9; font-size: 9px; font-weight: 600;
+    color: #595959; letter-spacing: 0.4px; text-transform: uppercase;
+    font-family: 'Geist Mono', monospace; border-bottom: 1px solid #e6e6e6;
+  }
+  .hist-row {
+    display: grid; grid-template-columns: 80px 1fr;
+    gap: 14px; padding: 10px 14px; border-bottom: 1px solid #f2f2f2;
+    break-inside: avoid;
+  }
+  .hist-row:last-child { border-bottom: none; }
+  .hist-line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 11px; }
+  .hist-note { font-size: 11px; color: #1a1a1a; margin-top: 5px; line-height: 1.5; }
+</style>
+</head>
+<body>
+<div class="doc-header">
+    <div style="display:flex;align-items:center;gap:14px">
+      <img src="assets/morae-logo.svg" alt="Morae" style="height:24px"/>
+      <div style="width:1px;height:18px;background:#d9d9d9"></div>
+      <div>
+        <div style="font-weight:600">Model Fitness Platform</div>
+        <div class="muted small mono">v0.1.4 · MLI · Scoreboard</div>
+      </div>
+    </div>
+    <div class="muted small mono">run-2026-04-28-mli-r1</div>
+  </div>
+
+<section class="page">
+  <header class="page-head">
+    <div class="page-eyebrow">Portfolio · MLI · Production</div>
+    <h1>Approved model portfolio</h1>
+    <div class="muted">Latest matrix run <span class="mono">run-2026-04-28-mli-r1</span> · scored under rubric <span class="mono">v0.1.4</span></div>
+  </header>
+  
+<div class="drift-banner">
+  <strong>3 active drift signals from production.</strong>
+  Online evaluators flagging divergence from latest evaluation scores.
+</div>
+  
+<div class="run-stats">
+  <div><div class="eyebrow">Tasks</div><div class="stat">1,284</div></div>
+  <div><div class="eyebrow">Judge calls</div><div class="stat">3.2k</div></div>
+  <div><div class="eyebrow">Run cost</div><div class="stat">$184.20</div></div>
+  <div><div class="eyebrow">Duration</div><div class="stat">47m</div></div>
+  <div><div class="eyebrow">Started</div><div class="stat">Apr 28 · 08:14</div></div>
+  <div><div class="eyebrow">Triggered</div><div class="stat mono">ci-runner</div></div>
+</div>
+  
+  <section class="tier-card">
+    <div class="tier-head" style="border-left:4px solid var(--yellow)">
+      <div style="display:flex;align-items:center;gap:14px">
+        <span class="tier-pill" style="background:var(--yellow);color:#0d0d0d">T1</span>
+        <div>
+          <div class="tier-title">Classification & Routing</div>
+          <div class="muted small">Cheap, fast, deterministic. Intent classification, query routing, structured triage.</div>
+        </div>
+      </div>
+      <div class="muted small mono">6 cands · 5 dims · 1 drift</div>
+    </div>
+    <div class="portfolio-row">
+      <div class="slot">
+      <div class="eyebrow">Primary</div>
+      <div class="slot-name">mli-routing-ft v3</div>
+      <div class="muted">Morae · Foundry · base: GPT-4.1-mini</div>
+      <div style="display:flex;align-items:center;gap:10px;margin-top:8px">
+        <span class="big-num">91.2</span>
+        <svg width="70" height="24" style="overflow:visible;vertical-align:middle"><path d="M0.0 22.0 L14.0 16.5 L28.0 11.2 L42.0 7.9 L56.0 3.8 L70.0 2.0 " fill="none" stroke="var(--yellow)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span class="mono small"><span style="color:#03a649">▲ +0.8</span></span>
+      </div>
+    </div>
+      <div class="slot">
+      <div class="eyebrow">Fallback</div>
+      <div class="slot-name">Claude Haiku 4.5</div>
+      <div class="muted">Anthropic · Foundry</div>
+      <div style="display:flex;align-items:center;gap:10px;margin-top:8px">
+        <span class="big-num">88.7</span>
+        <svg width="70" height="24" style="overflow:visible;vertical-align:middle"><path d="M0.0 22.0 L14.0 16.9 L28.0 11.7 L42.0 6.6 L56.0 3.7 L70.0 2.0 " fill="none" stroke="var(--yellow)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span class="mono small"><span style="color:#03a649">▲ +0.3</span></span>
+      </div>
+    </div>
+      <div class="slot">
+        <div class="eyebrow">Under evaluation</div>
+        <div class="big-stat">2</div>
+        <div class="muted small">GPT-4.1-mini, Gemini 2.5 Flash</div>
+      </div>
+      <div class="slot">
+        <div class="eyebrow">Rejected</div>
+        <div class="big-stat" style="color:#737373">2</div>
+        <div class="muted small">Top: latency p95 gate failed</div>
+      </div>
+    </div>
+    <div class="scorecard">
+      <div class="eyebrow scard-head">Latest matrix run · scorecard</div>
+      <table class="score-table">
+        <thead>
+          <tr>
+            <th>#</th><th class="left">Candidate</th><th>Status</th><th class="right">Composite</th>
+            <th class="right">Routing accuracy 🔒<div class="muted mono" style="font-size:9px">35%</div></th><th class="right">Latency p95 🔒<div class="muted mono" style="font-size:9px">25%</div></th><th class="right">Cost per query<div class="muted mono" style="font-size:9px">20%</div></th><th class="right">Robustness to paraphrase<div class="muted mono" style="font-size:9px">15%</div></th><th class="right">Refusal calibration 🔒<div class="muted mono" style="font-size:9px">5%</div></th>
+            <th>Trend</th>
+          </tr>
+        </thead>
+        <tbody><tr >
+      <td class="mono center">1</td>
+      <td>
+        <div><strong>mli-routing-ft v3</strong> <span class="muted">· Morae</span></div>
+        
+      </td>
+      <td><span class="chip" style="color:#0d0d0d;background:#fff">Approved · Primary</span></td>
+      <td class="mono right strong">91.2</td>
+      <td class="mono right">96.4%</td><td class="mono right">380ms</td><td class="mono right">$0.002</td><td class="mono right">92.0%</td><td class="mono right">0.4%</td>
+      <td><svg width="55" height="18" style="overflow:visible;vertical-align:middle"><path d="M0.0 16.0 L11.0 12.2 L22.0 8.5 L33.0 6.2 L44.0 3.2 L55.0 2.0 " fill="none" stroke="var(--yellow)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></td>
+    </tr><tr >
+      <td class="mono center">2</td>
+      <td>
+        <div><strong>Claude Haiku 4.5</strong> <span class="muted">· Anthropic</span></div>
+        
+      </td>
+      <td><span class="chip" style="color:#03a649;background:#d7f4ea">Approved · Fallback</span></td>
+      <td class="mono right strong">88.7</td>
+      <td class="mono right">94.1%</td><td class="mono right">520ms</td><td class="mono right">$0.004</td><td class="mono right">89.0%</td><td class="mono right">0.5%</td>
+      <td><svg width="55" height="18" style="overflow:visible;vertical-align:middle"><path d="M0.0 16.0 L11.0 12.4 L22.0 8.8 L33.0 5.2 L44.0 3.2 L55.0 2.0 " fill="none" stroke="var(--yellow)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></td>
+    </tr><tr >
+      <td class="mono center">3</td>
+      <td>
+        <div><strong>GPT-4.1-mini</strong> <span class="muted">· OpenAI</span></div>
+        
+      </td>
+      <td><span class="chip" style="color:#086ba4;background:#dbf2ff">Under evaluation</span></td>
+      <td class="mono right strong">86.2</td>
+      <td class="mono right">93.0%</td><td class="mono right">610ms</td><td class="mono right">$0.006</td><td class="mono right">86.0%</td><td class="mono right">0.6%</td>
+      <td><svg width="55" height="18" style="overflow:visible;vertical-align:middle"><path d="M0.0 16.0 L11.0 13.0 L22.0 8.5 L33.0 5.0 L44.0 3.5 L55.0 2.0 " fill="none" stroke="var(--yellow)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></td>
+    </tr><tr >
+      <td class="mono center">4</td>
+      <td>
+        <div><strong>Gemini 2.5 Flash</strong> <span class="muted">· Google</span></div>
+        
+      </td>
+      <td><span class="chip" style="color:#086ba4;background:#dbf2ff">Under evaluation</span></td>
+      <td class="mono right strong">84.8</td>
+      <td class="mono right">92.4%</td><td class="mono right">480ms</td><td class="mono right">$0.003</td><td class="mono right">81.0%</td><td class="mono right">1.1%</td>
+      <td><svg width="55" height="18" style="overflow:visible;vertical-align:middle"><path d="M0.0 16.0 L11.0 11.3 L22.0 8.8 L33.0 6.4 L44.0 3.9 L55.0 2.0 " fill="none" stroke="var(--yellow)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></td>
+    </tr><tr class="rej">
+      <td class="mono center">5</td>
+      <td>
+        <div><strong>Llama 3.3 70B Instruct</strong> <span class="muted">· Meta</span></div>
+        <div class="rej-reason">Latency p95 gate failed (790ms > 600ms)</div>
+      </td>
+      <td><span class="chip" style="color:#d93417;background:#ffddd8">Rejected</span></td>
+      <td class="mono right strong">78.3</td>
+      <td class="mono right">91.0%</td><td class="mono right">790ms</td><td class="mono right">$0.006</td><td class="mono right">84.0%</td><td class="mono right">0.7%</td>
+      <td><svg width="55" height="18" style="overflow:visible;vertical-align:middle"><path d="M0.0 16.0 L11.0 13.2 L22.0 8.5 L33.0 4.8 L44.0 2.9 L55.0 2.0 " fill="none" stroke="var(--yellow)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></td>
+    </tr><tr class="rej">
+      <td class="mono center">6</td>
+      <td>
+        <div><strong>Mistral Large 2</strong> <span class="muted">· Mistral</span></div>
+        <div class="rej-reason">Routing accuracy gate failed (89.2% < 92%)</div>
+      </td>
+      <td><span class="chip" style="color:#d93417;background:#ffddd8">Rejected</span></td>
+      <td class="mono right strong">75.1</td>
+      <td class="mono right">89.2%</td><td class="mono right">540ms</td><td class="mono right">$0.005</td><td class="mono right">82.0%</td><td class="mono right">0.8%</td>
+      <td><svg width="55" height="18" style="overflow:visible;vertical-align:middle"><path d="M0.0 2.0 L11.0 4.1 L22.0 9.6 L33.0 12.2 L44.0 14.7 L55.0 16.0 " fill="none" stroke="var(--yellow)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></td>
+    </tr></tbody>
+      </table>
+    </div>
+  </section>
+  <section class="tier-card">
+    <div class="tier-head" style="border-left:4px solid var(--orange)">
+      <div style="display:flex;align-items:center;gap:14px">
+        <span class="tier-pill" style="background:var(--orange);color:#fff">T2</span>
+        <div>
+          <div class="tier-title">Structured Generation & Tool Use</div>
+          <div class="muted small">Tool-calling, schema-bound output, multi-step extraction. The workhorse tier.</div>
+        </div>
+      </div>
+      <div class="muted small mono">7 cands · 6 dims · 1 drift</div>
+    </div>
+    <div class="portfolio-row">
+      <div class="slot">
+      <div class="eyebrow">Primary</div>
+      <div class="slot-name">Claude Sonnet 4</div>
+      <div class="muted">Anthropic · Foundry</div>
+      <div style="display:flex;align-items:center;gap:10px;margin-top:8px">
+        <span class="big-num">89.3</span>
+        <svg width="70" height="24" style="overflow:visible;vertical-align:middle"><path d="M0.0 22.0 L14.0 16.0 L28.0 11.1 L42.0 7.7 L56.0 4.3 L70.0 2.0 " fill="none" stroke="var(--orange)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span class="mono small"><span style="color:#03a649">▲ +0.6</span></span>
+      </div>
+    </div>
+      <div class="slot">
+      <div class="eyebrow">Fallback</div>
+      <div class="slot-name">Claude Haiku 4.5</div>
+      <div class="muted">Anthropic · Foundry</div>
+      <div style="display:flex;align-items:center;gap:10px;margin-top:8px">
+        <span class="big-num">84.6</span>
+        <svg width="70" height="24" style="overflow:visible;vertical-align:middle"><path d="M0.0 22.0 L14.0 15.8 L28.0 10.4 L42.0 6.9 L56.0 4.2 L70.0 2.0 " fill="none" stroke="var(--orange)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span class="mono small"><span style="color:#03a649">▲ +0.5</span></span>
+      </div>
+    </div>
+      <div class="slot">
+        <div class="eyebrow">Under evaluation</div>
+        <div class="big-stat">3</div>
+        <div class="muted small">mli-extract-ft v2, GPT-4o, +1</div>
+      </div>
+      <div class="slot">
+        <div class="eyebrow">Rejected</div>
+        <div class="big-stat" style="color:#737373">2</div>
+        <div class="muted small">Top: schema conformance gate failed</div>
+      </div>
+    </div>
+    <div class="scorecard">
+      <div class="eyebrow scard-head">Latest matrix run · scorecard</div>
+      <table class="score-table">
+        <thead>
+          <tr>
+            <th>#</th><th class="left">Candidate</th><th>Status</th><th class="right">Composite</th>
+            <th class="right">Schema conformance 🔒<div class="muted mono" style="font-size:9px">25%</div></th><th class="right">Tool selection<div class="muted mono" style="font-size:9px">20%</div></th><th class="right">Extraction F1<div class="muted mono" style="font-size:9px">20%</div></th><th class="right">Latency p95<div class="muted mono" style="font-size:9px">15%</div></th><th class="right">Cost per task<div class="muted mono" style="font-size:9px">15%</div></th><th class="right">PII leakage 🔒<div class="muted mono" style="font-size:9px">5%</div></th>
+            <th>Trend</th>
+          </tr>
+        </thead>
+        <tbody><tr >
+      <td class="mono center">1</td>
+      <td>
+        <div><strong>Claude Sonnet 4</strong> <span class="muted">· Anthropic</span></div>
+        
+      </td>
+      <td><span class="chip" style="color:#0d0d0d;background:#fff">Approved · Primary</span></td>
+      <td class="mono right strong">89.3</td>
+      <td class="mono right">100.0%</td><td class="mono right">91.0%</td><td class="mono right">0.88</td><td class="mono right">1.85s</td><td class="mono right">$0.019</td><td class="mono right">0.0%</td>
+      <td><svg width="55" height="18" style="overflow:visible;vertical-align:middle"><path d="M0.0 16.0 L11.0 11.8 L22.0 8.3 L33.0 6.0 L44.0 3.6 L55.0 2.0 " fill="none" stroke="var(--orange)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></td>
+    </tr><tr >
+      <td class="mono center">2</td>
+      <td>
+        <div><strong>Claude Haiku 4.5</strong> <span class="muted">· Anthropic</span></div>
+        
+      </td>
+      <td><span class="chip" style="color:#03a649;background:#d7f4ea">Approved · Fallback</span></td>
+      <td class="mono right strong">84.6</td>
+      <td class="mono right">100.0%</td><td class="mono right">86.0%</td><td class="mono right">0.83</td><td class="mono right">1.10s</td><td class="mono right">$0.007</td><td class="mono right">0.0%</td>
+      <td><svg width="55" height="18" style="overflow:visible;vertical-align:middle"><path d="M0.0 16.0 L11.0 11.6 L22.0 7.9 L33.0 5.4 L44.0 3.6 L55.0 2.0 " fill="none" stroke="var(--orange)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></td>
+    </tr><tr >
+      <td class="mono center">3</td>
+      <td>
+        <div><strong>mli-extract-ft v2</strong> <span class="muted">· Morae</span></div>
+        
+      </td>
+      <td><span class="chip" style="color:#086ba4;background:#dbf2ff">Under evaluation</span></td>
+      <td class="mono right strong">82.9</td>
+      <td class="mono right">100.0%</td><td class="mono right">79.0%</td><td class="mono right">0.86</td><td class="mono right">980ms</td><td class="mono right">$0.005</td><td class="mono right">0.0%</td>
+      <td><svg width="55" height="18" style="overflow:visible;vertical-align:middle"><path d="M0.0 16.0 L11.0 11.1 L22.0 7.9 L33.0 5.0 L44.0 3.2 L55.0 2.0 " fill="none" stroke="var(--orange)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></td>
+    </tr><tr >
+      <td class="mono center">4</td>
+      <td>
+        <div><strong>GPT-4o</strong> <span class="muted">· OpenAI</span></div>
+        
+      </td>
+      <td><span class="chip" style="color:#086ba4;background:#dbf2ff">Under evaluation</span></td>
+      <td class="mono right strong">81.5</td>
+      <td class="mono right">99.6%</td><td class="mono right">88.0%</td><td class="mono right">0.82</td><td class="mono right">1.62s</td><td class="mono right">$0.024</td><td class="mono right">0.0%</td>
+      <td><svg width="55" height="18" style="overflow:visible;vertical-align:middle"><path d="M0.0 2.0 L11.0 8.2 L22.0 9.8 L33.0 12.9 L44.0 14.4 L55.0 16.0 " fill="none" stroke="var(--orange)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></td>
+    </tr><tr >
+      <td class="mono center">5</td>
+      <td>
+        <div><strong>Gemini 2.5 Pro</strong> <span class="muted">· Google</span></div>
+        
+      </td>
+      <td><span class="chip" style="color:#086ba4;background:#dbf2ff">Under evaluation</span></td>
+      <td class="mono right strong">80.1</td>
+      <td class="mono right">99.2%</td><td class="mono right">84.0%</td><td class="mono right">0.80</td><td class="mono right">1.73s</td><td class="mono right">$0.012</td><td class="mono right">0.1%</td>
+      <td><svg width="55" height="18" style="overflow:visible;vertical-align:middle"><path d="M0.0 16.0 L11.0 11.7 L22.0 7.8 L33.0 4.9 L44.0 3.0 L55.0 2.0 " fill="none" stroke="var(--orange)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></td>
+    </tr><tr class="rej">
+      <td class="mono center">6</td>
+      <td>
+        <div><strong>Mistral Large 2</strong> <span class="muted">· Mistral</span></div>
+        <div class="rej-reason">Schema conformance gate failed (97.8% < 100%)</div>
+      </td>
+      <td><span class="chip" style="color:#d93417;background:#ffddd8">Rejected</span></td>
+      <td class="mono right strong">73.4</td>
+      <td class="mono right">97.8%</td><td class="mono right">78.0%</td><td class="mono right">0.74</td><td class="mono right">1.40s</td><td class="mono right">$0.009</td><td class="mono right">0.0%</td>
+      <td><svg width="55" height="18" style="overflow:visible;vertical-align:middle"><path d="M0.0 16.0 L11.0 10.4 L22.0 4.8 L33.0 2.0 L44.0 4.8 L55.0 4.8 " fill="none" stroke="var(--orange)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></td>
+    </tr><tr class="rej">
+      <td class="mono center">7</td>
+      <td>
+        <div><strong>Llama 3.3 70B Instruct</strong> <span class="muted">· Meta</span></div>
+        <div class="rej-reason">Schema conformance gate failed (96.4% < 100%)</div>
+      </td>
+      <td><span class="chip" style="color:#d93417;background:#ffddd8">Rejected</span></td>
+      <td class="mono right strong">71.0</td>
+      <td class="mono right">96.4%</td><td class="mono right">75.0%</td><td class="mono right">0.71</td><td class="mono right">1.28s</td><td class="mono right">$0.006</td><td class="mono right">0.0%</td>
+      <td><svg width="55" height="18" style="overflow:visible;vertical-align:middle"><path d="M0.0 2.0 L11.0 6.7 L22.0 11.3 L33.0 16.0 L44.0 16.0 L55.0 16.0 " fill="none" stroke="var(--orange)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></td>
+    </tr></tbody>
+      </table>
+    </div>
+  </section>
+  <section class="tier-card">
+    <div class="tier-head" style="border-left:4px solid var(--warm-red)">
+      <div style="display:flex;align-items:center;gap:14px">
+        <span class="tier-pill" style="background:var(--warm-red);color:#fff">T3</span>
+        <div>
+          <div class="tier-title">Synthesis & Client-Facing Reasoning</div>
+          <div class="muted small">Long-form synthesis, citations, advisory tone. Highest stakes; client-visible.</div>
+        </div>
+      </div>
+      <div class="muted small mono">7 cands · 7 dims · 1 drift</div>
+    </div>
+    <div class="portfolio-row">
+      <div class="slot">
+      <div class="eyebrow">Primary</div>
+      <div class="slot-name">Claude Opus 4.1</div>
+      <div class="muted">Anthropic · Foundry</div>
+      <div style="display:flex;align-items:center;gap:10px;margin-top:8px">
+        <span class="big-num">92.1</span>
+        <svg width="70" height="24" style="overflow:visible;vertical-align:middle"><path d="M0.0 22.0 L14.0 15.5 L28.0 11.2 L42.0 7.9 L56.0 4.7 L70.0 2.0 " fill="none" stroke="var(--warm-red)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span class="mono small"><span style="color:#03a649">▲ +0.5</span></span>
+      </div>
+    </div>
+      <div class="slot">
+      <div class="eyebrow">Fallback</div>
+      <div class="slot-name">Claude Sonnet 4</div>
+      <div class="muted">Anthropic · Foundry</div>
+      <div style="display:flex;align-items:center;gap:10px;margin-top:8px">
+        <span class="big-num">87.8</span>
+        <svg width="70" height="24" style="overflow:visible;vertical-align:middle"><path d="M0.0 22.0 L14.0 16.7 L28.0 11.8 L42.0 6.9 L56.0 4.1 L70.0 2.0 " fill="none" stroke="var(--warm-red)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span class="mono small"><span style="color:#03a649">▲ +0.6</span></span>
+      </div>
+    </div>
+      <div class="slot">
+        <div class="eyebrow">Under evaluation</div>
+        <div class="big-stat">3</div>
+        <div class="muted small">GPT-4o, Gemini 2.5 Pro, +1</div>
+      </div>
+      <div class="slot">
+        <div class="eyebrow">Rejected</div>
+        <div class="big-stat" style="color:#737373">2</div>
+        <div class="muted small">Top: citation faithfulness gate failed</div>
+      </div>
+    </div>
+    <div class="scorecard">
+      <div class="eyebrow scard-head">Latest matrix run · scorecard</div>
+      <table class="score-table">
+        <thead>
+          <tr>
+            <th>#</th><th class="left">Candidate</th><th>Status</th><th class="right">Composite</th>
+            <th class="right">Synthesis quality<div class="muted mono" style="font-size:9px">30%</div></th><th class="right">Citation faithfulness 🔒<div class="muted mono" style="font-size:9px">20%</div></th><th class="right">Advisory tone<div class="muted mono" style="font-size:9px">10%</div></th><th class="right">Reasoning depth<div class="muted mono" style="font-size:9px">15%</div></th><th class="right">Latency p95<div class="muted mono" style="font-size:9px">10%</div></th><th class="right">Cost per response<div class="muted mono" style="font-size:9px">10%</div></th><th class="right">Hallucination rate 🔒<div class="muted mono" style="font-size:9px">5%</div></th>
+            <th>Trend</th>
+          </tr>
+        </thead>
+        <tbody><tr >
+      <td class="mono center">1</td>
+      <td>
+        <div><strong>Claude Opus 4.1</strong> <span class="muted">· Anthropic</span></div>
+        
+      </td>
+      <td><span class="chip" style="color:#0d0d0d;background:#fff">Approved · Primary</span></td>
+      <td class="mono right strong">92.1</td>
+      <td class="mono right">4.6</td><td class="mono right">97.3%</td><td class="mono right">4.5</td><td class="mono right">4.5</td><td class="mono right">8.2s</td><td class="mono right">$0.094</td><td class="mono right">1.1%</td>
+      <td><svg width="55" height="18" style="overflow:visible;vertical-align:middle"><path d="M0.0 16.0 L11.0 11.5 L22.0 8.4 L33.0 6.2 L44.0 3.9 L55.0 2.0 " fill="none" stroke="var(--warm-red)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></td>
+    </tr><tr >
+      <td class="mono center">2</td>
+      <td>
+        <div><strong>Claude Sonnet 4</strong> <span class="muted">· Anthropic</span></div>
+        
+      </td>
+      <td><span class="chip" style="color:#03a649;background:#d7f4ea">Approved · Fallback</span></td>
+      <td class="mono right strong">87.8</td>
+      <td class="mono right">4.3</td><td class="mono right">95.8%</td><td class="mono right">4.4</td><td class="mono right">4.2</td><td class="mono right">5.4s</td><td class="mono right">$0.041</td><td class="mono right">1.6%</td>
+      <td><svg width="55" height="18" style="overflow:visible;vertical-align:middle"><path d="M0.0 16.0 L11.0 12.3 L22.0 8.9 L33.0 5.4 L44.0 3.5 L55.0 2.0 " fill="none" stroke="var(--warm-red)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></td>
+    </tr><tr >
+      <td class="mono center">3</td>
+      <td>
+        <div><strong>GPT-4o</strong> <span class="muted">· OpenAI</span></div>
+        
+      </td>
+      <td><span class="chip" style="color:#086ba4;background:#dbf2ff">Under evaluation</span></td>
+      <td class="mono right strong">86.0</td>
+      <td class="mono right">4.2</td><td class="mono right">94.1%</td><td class="mono right">4.1</td><td class="mono right">4.3</td><td class="mono right">6.1s</td><td class="mono right">$0.068</td><td class="mono right">1.8%</td>
+      <td><svg width="55" height="18" style="overflow:visible;vertical-align:middle"><path d="M0.0 2.0 L11.0 16.0 L22.0 16.0 L33.0 16.0 L44.0 16.0 L55.0 16.0 " fill="none" stroke="var(--warm-red)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></td>
+    </tr><tr >
+      <td class="mono center">4</td>
+      <td>
+        <div><strong>Gemini 2.5 Pro</strong> <span class="muted">· Google</span></div>
+        
+      </td>
+      <td><span class="chip" style="color:#086ba4;background:#dbf2ff">Under evaluation</span></td>
+      <td class="mono right strong">84.4</td>
+      <td class="mono right">4.1</td><td class="mono right">93.0%</td><td class="mono right">4.0</td><td class="mono right">4.2</td><td class="mono right">7.0s</td><td class="mono right">$0.046</td><td class="mono right">2.0%</td>
+      <td><svg width="55" height="18" style="overflow:visible;vertical-align:middle"><path d="M0.0 16.0 L11.0 12.2 L22.0 8.3 L33.0 5.2 L44.0 3.4 L55.0 2.0 " fill="none" stroke="var(--warm-red)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></td>
+    </tr><tr >
+      <td class="mono center">5</td>
+      <td>
+        <div><strong>MorAI-Synth-1 (custom)</strong> <span class="muted">· Morae</span></div>
+        
+      </td>
+      <td><span class="chip" style="color:#086ba4;background:#dbf2ff">Under evaluation</span></td>
+      <td class="mono right strong">82.1</td>
+      <td class="mono right">4.0</td><td class="mono right">96.2%</td><td class="mono right">4.4</td><td class="mono right">3.8</td><td class="mono right">4.2s</td><td class="mono right">$0.029</td><td class="mono right">1.3%</td>
+      <td><svg width="55" height="18" style="overflow:visible;vertical-align:middle"><path d="M22.0 16.0 L33.0 9.6 L44.0 5.4 L55.0 2.0 " fill="none" stroke="var(--warm-red)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></td>
+    </tr><tr class="rej">
+      <td class="mono center">6</td>
+      <td>
+        <div><strong>o4-mini</strong> <span class="muted">· OpenAI</span></div>
+        <div class="rej-reason">Citation faithfulness gate failed (91.2% < 95%)</div>
+      </td>
+      <td><span class="chip" style="color:#d93417;background:#ffddd8">Rejected</span></td>
+      <td class="mono right strong">79.9</td>
+      <td class="mono right">4.0</td><td class="mono right">91.2%</td><td class="mono right">3.8</td><td class="mono right">4.1</td><td class="mono right">5.8s</td><td class="mono right">$0.032</td><td class="mono right">2.1%</td>
+      <td><svg width="55" height="18" style="overflow:visible;vertical-align:middle"><path d="M0.0 9.0 L11.0 2.0 L22.0 12.5 L33.0 16.0 L44.0 16.0 L55.0 16.0 " fill="none" stroke="var(--warm-red)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></td>
+    </tr><tr class="rej">
+      <td class="mono center">7</td>
+      <td>
+        <div><strong>Mistral Large 2</strong> <span class="muted">· Mistral</span></div>
+        <div class="rej-reason">Hallucination rate gate failed (3.4% > 2%)</div>
+      </td>
+      <td><span class="chip" style="color:#d93417;background:#ffddd8">Rejected</span></td>
+      <td class="mono right strong">74.6</td>
+      <td class="mono right">3.8</td><td class="mono right">92.4%</td><td class="mono right">3.7</td><td class="mono right">3.6</td><td class="mono right">4.9s</td><td class="mono right">$0.026</td><td class="mono right">3.4%</td>
+      <td><svg width="55" height="18" style="overflow:visible;vertical-align:middle"><path d="M0.0 2.0 L11.0 9.0 L22.0 12.5 L33.0 14.2 L44.0 16.0 L55.0 16.0 " fill="none" stroke="var(--warm-red)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></td>
+    </tr></tbody>
+      </table>
+    </div>
+  </section>
+</section>
+<div class="doc-header">
+    <div style="display:flex;align-items:center;gap:14px">
+      <img src="assets/morae-logo.svg" alt="Morae" style="height:24px"/>
+      <div style="width:1px;height:18px;background:#d9d9d9"></div>
+      <div>
+        <div style="font-weight:600">Model Fitness Platform</div>
+        <div class="muted small mono">v0.1.4 · MLI · Editor</div>
+      </div>
+    </div>
+    <div class="muted small mono">run-2026-04-28-mli-r1</div>
+  </div>
+
+<section class="page">
+  <header class="page-head">
+    <div class="page-eyebrow">Editor · MLI · live impact</div>
+    <h1>Rubric · T2 · Structured Generation & Tool Use</h1>
+    <div class="muted">Edits below re-score the latest matrix run live. Save bumps the rubric version and triggers a fresh matrix run.</div>
+  </header>
+  <div class="tier-strip">
+    
+      <div class="tier-strip-item ">
+        <span class="tier-pill" style="background:var(--yellow);color:#0d0d0d">T1</span>
+        <div>
+          <div><strong>Classification & Routing</strong></div>
+          <div class="muted small">5 dims · 6 cands</div>
+        </div>
+      </div>
+      <div class="tier-strip-item active">
+        <span class="tier-pill" style="background:var(--orange);color:#fff">T2</span>
+        <div>
+          <div><strong>Structured Generation & Tool Use</strong></div>
+          <div class="muted small">6 dims · 7 cands</div>
+        </div>
+      </div>
+      <div class="tier-strip-item ">
+        <span class="tier-pill" style="background:var(--warm-red);color:#fff">T3</span>
+        <div>
+          <div><strong>Synthesis & Client-Facing Reasoning</strong></div>
+          <div class="muted small">7 dims · 7 cands</div>
+        </div>
+      </div>
+  </div>
+  <div class="rubric-grid">
+    <div class="rubric-card">
+    <div class="rubric-head">
+      <div><strong>Current · v0.1.4</strong> <span class="chip-mini">live · YAML</span></div>
+      <div class="muted small">Σ <span class="mono strong" style="color:#03a649">100%</span></div>
+    </div>
+    
+      <div class="rubric-row">
+        <div>
+          <div><strong>Schema conformance</strong> <span class="gate">🔒 100%</span></div>
+          <div class="muted small">JSON Schema validation pass rate.</div>
+        </div>
+        <div class="weight-bar">
+          <div class="weight-fill" style="width:50%"></div>
+        </div>
+        <div class="mono strong right" style="min-width:40px">25%</div>
+      </div>
+    
+      <div class="rubric-row">
+        <div>
+          <div><strong>Tool selection</strong></div>
+          <div class="muted small">Correct tool chosen vs. golden tool transcripts.</div>
+        </div>
+        <div class="weight-bar">
+          <div class="weight-fill" style="width:40%"></div>
+        </div>
+        <div class="mono strong right" style="min-width:40px">20%</div>
+      </div>
+    
+      <div class="rubric-row">
+        <div>
+          <div><strong>Extraction F1</strong></div>
+          <div class="muted small">Span-level F1 on entity extraction tasks.</div>
+        </div>
+        <div class="weight-bar">
+          <div class="weight-fill" style="width:40%"></div>
+        </div>
+        <div class="mono strong right" style="min-width:40px">20%</div>
+      </div>
+    
+      <div class="rubric-row">
+        <div>
+          <div><strong>Latency p95</strong></div>
+          <div class="muted small">p95 over multi-turn tool calls.</div>
+        </div>
+        <div class="weight-bar">
+          <div class="weight-fill" style="width:30%"></div>
+        </div>
+        <div class="mono strong right" style="min-width:40px">15%</div>
+      </div>
+    
+      <div class="rubric-row">
+        <div>
+          <div><strong>Cost per task</strong></div>
+          <div class="muted small">Cost amortised per completed task.</div>
+        </div>
+        <div class="weight-bar">
+          <div class="weight-fill" style="width:30%"></div>
+        </div>
+        <div class="mono strong right" style="min-width:40px">15%</div>
+      </div>
+    
+      <div class="rubric-row">
+        <div>
+          <div><strong>PII leakage</strong> <span class="gate">🔒 0 leaks</span></div>
+          <div class="muted small">Detected PII in outputs vs. allow-list.</div>
+        </div>
+        <div class="weight-bar">
+          <div class="weight-fill" style="width:10%"></div>
+        </div>
+        <div class="mono strong right" style="min-width:40px">5%</div>
+      </div>
+    
+  </div>
+    <div class="rubric-card">
+    <div class="rubric-head">
+      <div><strong>Edited · live preview</strong> <span class="chip-mini ok">in sync</span></div>
+      <div class="muted small">Σ <span class="mono strong" style="color:#03a649">100%</span></div>
+    </div>
+    
+      <div class="rubric-row">
+        <div>
+          <div><strong>Schema conformance</strong> <span class="gate">🔒 100%</span></div>
+          <div class="muted small">JSON Schema validation pass rate.</div>
+        </div>
+        <div class="weight-bar">
+          <div class="weight-fill" style="width:50%"></div>
+        </div>
+        <div class="mono strong right" style="min-width:40px">25%</div>
+      </div>
+    
+      <div class="rubric-row">
+        <div>
+          <div><strong>Tool selection</strong></div>
+          <div class="muted small">Correct tool chosen vs. golden tool transcripts.</div>
+        </div>
+        <div class="weight-bar">
+          <div class="weight-fill" style="width:40%"></div>
+        </div>
+        <div class="mono strong right" style="min-width:40px">20%</div>
+      </div>
+    
+      <div class="rubric-row">
+        <div>
+          <div><strong>Extraction F1</strong></div>
+          <div class="muted small">Span-level F1 on entity extraction tasks.</div>
+        </div>
+        <div class="weight-bar">
+          <div class="weight-fill" style="width:40%"></div>
+        </div>
+        <div class="mono strong right" style="min-width:40px">20%</div>
+      </div>
+    
+      <div class="rubric-row">
+        <div>
+          <div><strong>Latency p95</strong></div>
+          <div class="muted small">p95 over multi-turn tool calls.</div>
+        </div>
+        <div class="weight-bar">
+          <div class="weight-fill" style="width:30%"></div>
+        </div>
+        <div class="mono strong right" style="min-width:40px">15%</div>
+      </div>
+    
+      <div class="rubric-row">
+        <div>
+          <div><strong>Cost per task</strong></div>
+          <div class="muted small">Cost amortised per completed task.</div>
+        </div>
+        <div class="weight-bar">
+          <div class="weight-fill" style="width:30%"></div>
+        </div>
+        <div class="mono strong right" style="min-width:40px">15%</div>
+      </div>
+    
+      <div class="rubric-row">
+        <div>
+          <div><strong>PII leakage</strong> <span class="gate">🔒 0 leaks</span></div>
+          <div class="muted small">Detected PII in outputs vs. allow-list.</div>
+        </div>
+        <div class="weight-bar">
+          <div class="weight-fill" style="width:10%"></div>
+        </div>
+        <div class="mono strong right" style="min-width:40px">5%</div>
+      </div>
+    
+  </div>
+  </div>
+  <div class="eyebrow" style="margin:18px 0 8px">Live impact · re-scored 1,284 tasks from <span class="mono">run-2026-04-28-mli-r1</span></div>
+  <div class="impact-stats">
+    <div><div class="eyebrow">Rank shifts</div><div class="big-stat">0</div><div class="muted small">none — rubric matches saved</div></div>
+    <div><div class="eyebrow">New gate fails</div><div class="big-stat">0</div><div class="muted small">none</div></div>
+    <div><div class="eyebrow">Newly eligible</div><div class="big-stat">0</div><div class="muted small">none</div></div>
+    <div><div class="eyebrow">T-leader</div><div class="big-stat" style="font-size:14px;font-weight:600">unchanged</div><div class="muted small">Claude Sonnet 4 (89.3)</div></div>
+  </div>
+  <div class="muted small mono center" style="margin-top:14px">
+    Re-scoring uses cached evaluator outputs in LangSmith — no inference cost.
+  </div>
+</section>
+<div class="doc-header">
+    <div style="display:flex;align-items:center;gap:14px">
+      <img src="assets/morae-logo.svg" alt="Morae" style="height:24px"/>
+      <div style="width:1px;height:18px;background:#d9d9d9"></div>
+      <div>
+        <div style="font-weight:600">Model Fitness Platform</div>
+        <div class="muted small mono">v0.1.4 · MLI · Curator</div>
+      </div>
+    </div>
+    <div class="muted small mono">run-2026-04-28-mli-r1</div>
+  </div>
+
+<section class="page">
+  <header class="page-head">
+    <div class="page-eyebrow">Curator · golden datasets &amp; judge calibration</div>
+    <h1>Dataset stewardship</h1>
+    <div class="muted">Add new examples, review LLM-judge sample queue, flag disputed scores. Disputes feed the next rubric revisit.</div>
+  </header>
+
+  <h2 class="section-h">Golden datasets · MLI</h2>
+  
+<table class="data-table">
+  <thead><tr>
+    <th>Tier</th><th class="left">Dataset</th><th>Version</th><th class="right">Examples</th>
+    <th class="left">Coverage</th><th>Owner</th><th>Last edit</th>
+  </tr></thead>
+  <tbody>
+    <tr>
+        <td class="center"><span class="tier-pill" style="background:var(--yellow);color:#0d0d0d">T1</span></td>
+        <td class="mono"><strong>mli/routing-golden</strong></td>
+        <td class="mono muted center">2.4.1</td>
+        <td class="mono right strong">412</td>
+        <td><div class="cov-row"><div class="cov-wrap"><div class="cov-bar" style="width:86%;background:#03a649"></div></div><span class="mono small">86%</span></div></td>
+        <td class="muted center">jagdish.k</td>
+        <td class="muted mono center">2026-04-22</td>
+      </tr><tr>
+        <td class="center"><span class="tier-pill" style="background:var(--orange);color:#fff">T2</span></td>
+        <td class="mono"><strong>mli/extraction-golden</strong></td>
+        <td class="mono muted center">1.8.0</td>
+        <td class="mono right strong">528</td>
+        <td><div class="cov-row"><div class="cov-wrap"><div class="cov-bar" style="width:79%;background:#f7a604"></div></div><span class="mono small">79%</span></div></td>
+        <td class="muted center">jagdish.k</td>
+        <td class="muted mono center">2026-04-19</td>
+      </tr><tr>
+        <td class="center"><span class="tier-pill" style="background:var(--orange);color:#fff">T2</span></td>
+        <td class="mono"><strong>mli/tool-transcripts</strong></td>
+        <td class="mono muted center">0.6.2</td>
+        <td class="mono right strong">96</td>
+        <td><div class="cov-row"><div class="cov-wrap"><div class="cov-bar" style="width:62%;background:#d93417"></div></div><span class="mono small">62%</span></div></td>
+        <td class="muted center">wayne.palmer</td>
+        <td class="muted mono center">2026-04-10</td>
+      </tr><tr>
+        <td class="center"><span class="tier-pill" style="background:var(--warm-red);color:#fff">T3</span></td>
+        <td class="mono"><strong>mli/synthesis-golden</strong></td>
+        <td class="mono muted center">1.2.0</td>
+        <td class="mono right strong">184</td>
+        <td><div class="cov-row"><div class="cov-wrap"><div class="cov-bar" style="width:71%;background:#f7a604"></div></div><span class="mono small">71%</span></div></td>
+        <td class="muted center">sme.review</td>
+        <td class="muted mono center">2026-04-25</td>
+      </tr><tr>
+        <td class="center"><span class="tier-pill" style="background:var(--warm-red);color:#fff">T3</span></td>
+        <td class="mono"><strong>mli/citation-faithfulness</strong></td>
+        <td class="mono muted center">0.9.1</td>
+        <td class="mono right strong">144</td>
+        <td><div class="cov-row"><div class="cov-wrap"><div class="cov-bar" style="width:68%;background:#f7a604"></div></div><span class="mono small">68%</span></div></td>
+        <td class="muted center">sme.review</td>
+        <td class="muted mono center">2026-04-23</td>
+      </tr><tr>
+        <td class="center"><span class="chip">shared</span></td>
+        <td class="mono"><strong>shared/judge-calibration</strong></td>
+        <td class="mono muted center">1.0.0</td>
+        <td class="mono right strong">240</td>
+        <td><div class="cov-row"><div class="cov-wrap"><div class="cov-bar" style="width:92%;background:#03a649"></div></div><span class="mono small">92%</span></div></td>
+        <td class="muted center">wayne.palmer</td>
+        <td class="muted mono center">2026-03-30</td>
+      </tr>
+  </tbody>
+</table>
+
+  <div class="queue-stats">
+    <div><div class="eyebrow">In queue</div><div class="big-stat">5</div><div class="muted small">this cycle</div></div>
+    <div><div class="eyebrow">Pending</div><div class="big-stat" style="color:#8a6600">3</div><div class="muted small">awaiting review</div></div>
+    <div><div class="eyebrow">Agreed</div><div class="big-stat" style="color:#03a649">1</div><div class="muted small">judge confirmed</div></div>
+    <div><div class="eyebrow">Disputed</div><div class="big-stat" style="color:#d93417">1</div><div class="muted small">goes to stewards</div></div>
+  </div>
+
+  <h2 class="section-h">LLM-judge sample queue · 2.5% sampled</h2>
+  <table class="data-table queue-table">
+    <thead><tr>
+      <th>Tier</th><th class="left">Task</th><th class="left">Candidate · dim</th>
+      <th class="right">Score</th><th>Status</th><th class="left">Judge reasoning</th>
+    </tr></thead>
+    <tbody><tr>
+    <td class="center"><span class="tier-pill" style="background:var(--warm-red);color:#fff">T3</span></td>
+    <td><div><strong>Summarise novation clauses in §3 of attached MSA and flag uncapped indemnities.</strong></div><div class="muted small mono">mli/synthesis-golden</div></td>
+    <td><div><strong>Claude Opus 4.1</strong></div><div class="muted small">on <span class="mono">synthesis</span></div></td>
+    <td class="mono right strong">4.2</td>
+    <td><span class="chip" style="color:#262626;background:#f2f2f2">Pending review</span></td>
+    <td class="muted small">Faithful synthesis; minor coverage gap on §3.4(b). Tone within rubric.</td>
+  </tr><tr>
+    <td class="center"><span class="tier-pill" style="background:var(--warm-red);color:#fff">T3</span></td>
+    <td><div><strong>Cite the exact clause governing termination-for-convenience in this 84-page MSA.</strong></div><div class="muted small mono">mli/citation-faithfulness</div></td>
+    <td><div><strong>Claude Sonnet 4</strong></div><div class="muted small">on <span class="mono">citation</span></div></td>
+    <td class="mono right strong">91%</td>
+    <td><span class="chip" style="color:#262626;background:#f2f2f2">Pending review</span></td>
+    <td class="muted small">Citation [3] points to §11.2 but quoted span is from §11.4.</td>
+  </tr><tr>
+    <td class="center"><span class="tier-pill" style="background:var(--orange);color:#fff">T2</span></td>
+    <td><div><strong>Extract all parties, governing law, and effective date from the attached SOW.</strong></div><div class="muted small mono">mli/extraction-golden</div></td>
+    <td><div><strong>mli-extract-ft v2</strong></div><div class="muted small">on <span class="mono">extraction</span></div></td>
+    <td class="mono right strong">0.8</td>
+    <td><span class="chip" style="color:#03a649;background:#d7f4ea">Agreed</span></td>
+    <td class="muted small">Missed alias for "Customer" in §1.1; otherwise clean.</td>
+  </tr><tr>
+    <td class="center"><span class="tier-pill" style="background:var(--warm-red);color:#fff">T3</span></td>
+    <td><div><strong>Compare liability caps across the three attached supplier agreements.</strong></div><div class="muted small mono">mli/synthesis-golden</div></td>
+    <td><div><strong>GPT-4o</strong></div><div class="muted small">on <span class="mono">synthesis</span></div></td>
+    <td class="mono right strong">3.6</td>
+    <td><span class="chip" style="color:#d93417;background:#ffddd8">Disagreed</span></td>
+    <td class="muted small">Conflated cap on direct vs consequential damages in supplier C.</td>
+  </tr><tr>
+    <td class="center"><span class="tier-pill" style="background:var(--warm-red);color:#fff">T3</span></td>
+    <td><div><strong>Identify the change-of-control trigger and quote it.</strong></div><div class="muted small mono">mli/citation-faithfulness</div></td>
+    <td><div><strong>MorAI-Synth-1 (custom)</strong></div><div class="muted small">on <span class="mono">citation</span></div></td>
+    <td class="mono right strong">96%</td>
+    <td><span class="chip" style="color:#262626;background:#f2f2f2">Pending review</span></td>
+    <td class="muted small">Exact span match; correct §6.4(a) reference.</td>
+  </tr></tbody>
+  </table>
+</section>
+<div class="doc-header">
+    <div style="display:flex;align-items:center;gap:14px">
+      <img src="assets/morae-logo.svg" alt="Morae" style="height:24px"/>
+      <div style="width:1px;height:18px;background:#d9d9d9"></div>
+      <div>
+        <div style="font-weight:600">Model Fitness Platform</div>
+        <div class="muted small mono">v0.1.4 · MLI · History</div>
+      </div>
+    </div>
+    <div class="muted small mono">run-2026-04-28-mli-r1</div>
+  </div>
+
+<section class="page">
+  <header class="page-head">
+    <div class="page-eyebrow">History · MLI</div>
+    <h1>Audit trail</h1>
+    <div class="muted">Every rubric save and portfolio decision, with actor, run reference, and rationale.</div>
+  </header>
+  <div class="hist-panel">
+    
+      <div class="hist-day-head">2026-04-29</div>
+      <div class="hist-row">
+    <div class="mono muted">14:02</div>
+    <div>
+      <div class="hist-line">
+        <span class="chip" style="color:#086ba4;background:#dbf2ff">Rubric saved</span>
+        <span class="tier-pill" style="background:var(--warm-red);color:#fff">T3</span>
+        
+        <span class="chip-mini mono">v0.1.4</span>
+      </div>
+      <div class="hist-note">"Reweight citation faithfulness toward synthesis after Q4 review."</div>
+      <div class="muted small" style="margin-top:6px">
+        by <span class="mono">wayne.palmer</span>
+      </div>
+    </div>
+  </div>
+    
+      <div class="hist-day-head">2026-04-28</div>
+      <div class="hist-row">
+    <div class="mono muted">17:18</div>
+    <div>
+      <div class="hist-line">
+        <span class="chip" style="color:#03a649;background:#d7f4ea">Promoted to Primary</span>
+        <span class="tier-pill" style="background:var(--warm-red);color:#fff">T3</span>
+        <strong>Claude Opus 4.1</strong> <span class="muted">· Anthropic</span>
+        
+      </div>
+      <div class="hist-note">"Sustained 92.1 composite over 3 quarters; citation gate clean; ARB consensus."</div>
+      <div class="muted small" style="margin-top:6px">
+        by <span class="mono">chris.tabb</span> · <span class="mono">run-2026-04-28-mli-r1</span>
+      </div>
+    </div>
+  </div><div class="hist-row">
+    <div class="mono muted">17:11</div>
+    <div>
+      <div class="hist-line">
+        <span class="chip" style="color:#d93417;background:#ffddd8">Rejected</span>
+        <span class="tier-pill" style="background:var(--warm-red);color:#fff">T3</span>
+        <strong>Mistral Large 2</strong> <span class="muted">· Mistral</span>
+        
+      </div>
+      <div class="hist-note">"Hallucination rate 3.4% — exceeds T3 gate of <2%. Recheck after vendor v3 release."</div>
+      <div class="muted small" style="margin-top:6px">
+        by <span class="mono">chris.tabb</span> · <span class="mono">run-2026-04-28-mli-r1</span>
+      </div>
+    </div>
+  </div>
+    
+      <div class="hist-day-head">2026-04-22</div>
+      <div class="hist-row">
+    <div class="mono muted">09:47</div>
+    <div>
+      <div class="hist-line">
+        <span class="chip" style="color:#086ba4;background:#dbf2ff">Rubric saved</span>
+        <span class="tier-pill" style="background:var(--yellow);color:#0d0d0d">T1</span>
+        
+        <span class="chip-mini mono">v0.1.3</span>
+      </div>
+      
+      <div class="muted small" style="margin-top:6px">
+        by <span class="mono">wayne.palmer</span>
+      </div>
+    </div>
+  </div>
+    
+      <div class="hist-day-head">2026-04-15</div>
+      <div class="hist-row">
+    <div class="mono muted">11:30</div>
+    <div>
+      <div class="hist-line">
+        <span class="chip" style="color:#03a649;background:#d7f4ea">Promoted to Primary</span>
+        <span class="tier-pill" style="background:var(--yellow);color:#0d0d0d">T1</span>
+        <strong>mli-routing-ft v3</strong> <span class="muted">· Morae</span>
+        
+      </div>
+      <div class="hist-note">"Beats Haiku 4.5 on accuracy and cost; latency well under p95 gate."</div>
+      <div class="muted small" style="margin-top:6px">
+        by <span class="mono">wayne.palmer</span> · <span class="mono">run-2026-04-15-mli-r1</span>
+      </div>
+    </div>
+  </div>
+    
+      <div class="hist-day-head">2026-04-08</div>
+      <div class="hist-row">
+    <div class="mono muted">16:21</div>
+    <div>
+      <div class="hist-line">
+        <span class="chip" style="color:#086ba4;background:#dbf2ff">Rubric saved</span>
+        <span class="tier-pill" style="background:var(--orange);color:#fff">T2</span>
+        
+        <span class="chip-mini mono">v0.1.2</span>
+      </div>
+      <div class="hist-note">"Doubled schema conformance gate weight."</div>
+      <div class="muted small" style="margin-top:6px">
+        by <span class="mono">wayne.palmer</span>
+      </div>
+    </div>
+  </div>
+    
+  </div>
+</section>
+<script>
+  (async () => {
+    if (document.fonts && document.fonts.ready) { try { await document.fonts.ready; } catch(e){} }
+    setTimeout(() => window.print(), 500);
+  })();
+</script>
+</body>
+</html>
