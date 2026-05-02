@@ -197,7 +197,7 @@ jobs:
       mmfp_url: ${{ steps.deploy_ui.outputs.mmfp_url }}
     env:
       RG: ${{ vars.AZURE_RESOURCE_GROUP }}
-      CAE: ${{ vars.AZURE_CONTAINER_APPS_ENV }}
+      CAE: ${{ vars.AZURE_CONTAINER_APPS_ENVIRONMENT }}
       API_APP: ca-mmfp-api-dev
       UI_APP: ca-mmfp-ui-dev
       API_IMAGE: ${{ needs.build-and-push.outputs.api_image }}
