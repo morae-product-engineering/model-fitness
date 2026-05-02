@@ -1,0 +1,1 @@
+Domain logic for the Morae Model Fitness Platform. Contains the core data structures and business rules — `Rubric` (versioned scoring criteria), `MatrixRun` (a single evaluation pass across candidate models), and `Scorecard` (the human-readable output of a run) — with no dependency on infrastructure, plugins, or HTTP concerns.

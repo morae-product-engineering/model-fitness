@@ -1,0 +1,1 @@
+Cross-product reference datasets that are not specific to any single consuming product. Examples include generic instruction-following cases, multilingual prompts, and safety boundary probes that every product's rubric draws on. Product-specific datasets live under `products/<slug>/datasets/` instead.

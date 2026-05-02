@@ -1,0 +1,1 @@
+Skeleton configuration that a new product copies to bootstrap its own fitness profile. Contains placeholder rubric YAML, an empty datasets directory, and a prompt-templates stub — enough to run a first matrix with no harness changes. Copy this directory, rename it to the product slug, and fill in the product-specific values.
