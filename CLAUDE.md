@@ -89,7 +89,7 @@ Things you do **not** need to ask about:
 
 - Naming variables, structuring functions, picking idioms within the existing language.
 - Adding tests, refactoring for clarity within a tested unit, writing comments.
-- Adding new files in clearly-scoped locations (e.g. a new evaluator under `platform/evaluators/deterministic/`).
+- Adding new files in clearly-scoped locations (e.g. a new evaluator under `mmfp/evaluators/deterministic/`).
 - Picking between two implementation paths that produce the same observable behaviour.
 
 When in doubt, write a one-line message describing what you're about to do and ask "OK to proceed?" — short ask, no preamble. The human will say yes, no, or "do this instead" within minutes.
@@ -113,8 +113,8 @@ Write comments that a future human or AI agent would thank you for. Specifically
 
 ## Tests
 
-- **Unit tests** sit next to the code: `platform/core/foo.py` has tests in `platform/core/tests/test_foo.py` (Python) or `ui/components/Foo.test.tsx` (TypeScript). Mock external dependencies; test logic in isolation.
-- **Integration tests** sit in `platform/tests/` (Python) and exercise the boundary between modules with real-but-local dependencies (e.g. real SQLite, mocked HTTP).
+- **Unit tests** sit next to the code: `mmfp/core/foo.py` has tests in `mmfp/core/tests/test_foo.py` (Python) or `ui/components/Foo.test.tsx` (TypeScript). Mock external dependencies; test logic in isolation.
+- **Integration tests** sit in `mmfp/tests/` (Python) and exercise the boundary between modules with real-but-local dependencies (e.g. real SQLite, mocked HTTP).
 - **End-to-end tests** sit in `tests/e2e/` and run via Playwright against the deployed dev environment. One per slice as the slice-level acceptance test.
 - **All tests must be deterministic.** No reliance on wall-clock time, no random seeds without explicit fixing, no order-dependence between tests.
 
