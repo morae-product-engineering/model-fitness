@@ -17,7 +17,7 @@ Reference docs:
 - Rubric reference (v0.1): `docs/rubric-reference.md`
 - Decisions: `ADRs/` (MADR format, one file per decision)
 
-The Jira epic is **MLI-104** in the `MLI` project at `morae.atlassian.net`. Sub-tasks have prompts written for AI execution; you should usually be given a sub-task to do, not asked to invent one.
+The Jira epic is **MLI-104** in the `MLI` project at `morae.atlassian.net`. Sub-tasks have prompts written for AI execution; you will be given a sub-task to do, not asked to invent one.
 
 ## Stack
 
@@ -45,7 +45,7 @@ These are non-negotiable. If you find yourself wanting to break one, stop and as
 
 When given a sub-task:
 
-1. **Read the sub-task description in full**, including its acceptance criteria. If anything is ambiguous, ask before starting work — do not guess.
+1. **Read the sub-task description in full** via the Atlassian MCP, including its acceptance criteria. If anything is ambiguous, ask before starting work — do not guess.
 2. **Read the parent slice task** to understand what slice you're contributing to.
 3. **Check what already exists.** Run `tree -L 3` or equivalent. Don't recreate things that exist; don't break things you don't need to touch.
 4. **Make a branch.** Branch name from the sub-task: `slice-XX/<short-description>` (e.g. `slice-01/acceptance-test`).
@@ -54,12 +54,31 @@ When given a sub-task:
 7. **Refactor only if you have a green test.** Refactoring without test coverage is editing.
 8. **Commit in coherent small chunks.** Commit messages: present tense, imperative, max 72 chars first line. Body if needed. Reference the Jira sub-task: `Add Playwright reporter (MLI-218)`.
 9. **Open a PR.** PR description: summarise *what* changed and *why*, link the Jira sub-task. Don't just dump the commit messages.
+10. **Close the loop in Jira.** See "Closing the loop" below.
+
+## Closing the loop
+
+When you have completed a sub-task to the point where the PR is open and ready for human review, you complete the loop yourself in Jira. Do not write the summary to chat for the human to copy-paste — post it directly.
+
+Steps:
+
+1. **Transition the Jira sub-task to `In Review`** via the Atlassian MCP (`transitionJiraIssue`).
+2. **Add a comment to the Jira sub-task** (`addCommentToJiraIssue`) containing your summary. The comment includes:
+   - **Branch and PR URL** — so the human can jump straight to the diff.
+   - **Files changed** — bullet list with one-line description per file.
+   - **Acceptance criteria** — each one quoted, marked ✅ / ⚠️ / ❌, with a short note on how it was verified. Distinguish between behaviours you ran and behaviours you only proved via mocks.
+   - **Decisions worth review** — anywhere you made a judgement call the human might want to revisit. Be honest, not defensive.
+   - **Anything pending** — env vars, credentials, infrastructure not yet in place, follow-ups.
+
+The human (Wayne) takes it from there: reviews the PR, merges it, and transitions the ticket to `Done` after merge.
+
+**Do not transition to `Done` yourself.** That's the human's call after merge.
 
 ## When to ask the human
 
 You are allowed to make any decision that doesn't change a stable boundary or a test surface. You **must ask** before:
 
-- **Adding a new dependency** (Python or npm). New deps are commitments. Show what alternatives you considered.
+- **Adding a new dependency** (Python or npm) that isn't already named in CLAUDE.md or in the sub-task brief. Show what alternatives you considered. Dependencies already named here or in the brief are pre-authorised — install as needed.
 - **Modifying a plugin interface** (the P3 boundaries listed above).
 - **Modifying CI workflows** (`.github/workflows/*.yml`) outside of a sub-task that explicitly asks you to author or change them.
 - **Modifying infrastructure config** (`infra/`) outside of a sub-task that explicitly asks you to.
@@ -101,6 +120,8 @@ Write comments that a future human or AI agent would thank you for. Specifically
 
 The TestRail reporter (in `tests/reporters/testrail-reporter.ts`) auto-creates TestRail cases from Playwright test titles on first run. The test code is the source of truth for the test catalogue. Don't manually create cases in TestRail and reference them from code.
 
+When confirming acceptance criteria, distinguish between behaviours you have **actually run** (with real or simulated env vars) and behaviours you have only **proved via mocks**. Be explicit about which is which. The human deciding to merge needs to know.
+
 ## Architecture documentation
 
 Architectural decisions are recorded as ADRs in `ADRs/` using MADR format (one page max). When implementing a sub-task whose acceptance includes an ADR, write the ADR first as a draft, get it reviewed, then implement.
@@ -115,15 +136,20 @@ ADR titles use the form `NNNN-short-decision-title.md` where `NNNN` is the next 
 - Add a configuration option for a hypothetical future need.
 - Generate documentation that duplicates the code (READMEs that just list filenames, etc.).
 
-## Recommended model per task type
+## Subagents and model selection
 
-This is guidance for the human running you, but worth you knowing too:
+The repo defines three subagents in `.claude/agents/`:
 
-- **Sonnet** is the default. Fast, cheap, gets it right for boilerplate, scaffolding, well-defined implementations against clear specs.
-- **Opus** for genuinely tricky work: novel architecture, debugging across multiple files, anything where the prompt itself is ambiguous, anything where API contracts are being designed (not just implemented).
-- **Haiku** for simple edits inside a known file — typo fixes, single-line changes, mechanical updates.
+- **`quick`** — Haiku. Mechanical edits inside one or two files. Typo fixes, single-line changes, renames, mechanical updates that don't need reasoning.
+- **`junior-dev`** — Sonnet. The default. Well-defined sub-tasks, scaffolding, implementation against clear specs.
+- **`senior-dev`** — Opus. Ambiguous specs, novel logic, multi-file debugging, anything where the prompt itself is the work — i.e. you have to think before you can implement.
 
-If a sub-task description has a `## Recommended model` section, follow that. Switch model mid-session with `/model` if the task changes shape.
+Each Claude Code sub-task in Jira has a `## Recommended model` field. Translate it:
+- "Haiku" → `quick`
+- "Sonnet" → `junior-dev`
+- "Opus" → `senior-dev`
+
+The human invokes the subagent at session start with words like *"Use the senior-dev subagent for MLI-218."* If you find yourself running as the wrong tier — e.g. the prompt is more ambiguous than the recommended model suggested — say so at the top of your response and ask whether to escalate before doing the work.
 
 ## When this file is wrong
 
