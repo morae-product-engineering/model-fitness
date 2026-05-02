@@ -1,0 +1,186 @@
+/* ============================================================
+   Morae Design System — Colors & Type
+   Extracted from morai-nextjs-fe/app/globals.css (Development)
+   ============================================================ */
+
+:root {
+  /* -------- Brand (warm spectrum) -------- */
+  --red:           #ff0000;
+  --red-orange:    #ff3600;
+  --orange:        #ff6900;  /* signature accent / secondary */
+  --yellow-orange: #ff9400;
+  --yellow:        #ffbd00;
+
+  /* -------- Neutrals (1 = darkest, 13 = lightest) -------- */
+  --neutral-1:  #0d0d0d;
+  --neutral-2:  #1a1a1a;
+  --neutral-3:  #262626;
+  --neutral-4:  #404040;
+  --neutral-5:  #595959;
+  --neutral-6:  #737373;
+  --neutral-7:  #7f7f7f;
+  --neutral-8:  #888888;
+  --neutral-9:  #a6a6a6;
+  --neutral-10: #d9d9d9;
+  --neutral-11: #e6e6e6;
+  --neutral-12: #f2f2f2;
+  --neutral-13: #f9f9f9;
+  --pure-white: #ffffff;
+
+  /* -------- Semantic accents -------- */
+  --bright-blue: #0eaede;
+  --green:       #03a649;
+  --warm-yellow: #f7a604;
+  --warm-red:    #d93417;  /* destructive / alerts / brand tenant */
+  --destructive: #d93417;
+  --cherry:      #d60331;
+  --dark-cherry: #b0331d;
+  --purple:      #9747ff;
+
+  /* -------- Blues (info / data) -------- */
+  --blue-1: #168fd5;
+  --blue-2: #086ba4;
+  --blue-3: #006ba9;
+  --blue-4: #00517f;
+
+  /* -------- Pale / tint palette (backgrounds of status chips) -------- */
+  --pale-blue:     #9dc0df;
+  --light-blue:    #f0f9ff;
+  --light-blue-2:  #dbf2ff;
+  --cool-1:        #d8dcde;
+  --light-yellow:  #ffeecf;
+  --light-green:   #d7f4ea;
+  --light-red:     #ffddd8;
+  --light-purple:  #eddeff;
+
+  /* -------- Data-viz blues (charts) -------- */
+  --dataviz-blue-1: #02779a;
+  --dataviz-blue-2: #0286ae;
+  --dataviz-blue-3: #048fb9;
+  --dataviz-blue-4: #0698c4;
+  --dataviz-blue-5: #05a0cf;
+  --dataviz-blue-6: #0eaede;
+  --dataviz-blue-7: #1cbbeb;
+
+  /* -------- Semantic UI tokens -------- */
+  --radius:    0.625rem;   /* 10px default */
+  --radius-xs: 0.25rem;    /* 4px — input corners */
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  --background: var(--pure-white);
+  --foreground: var(--neutral-1);
+
+  --card:       var(--pure-white);
+  --card-fg:    var(--neutral-1);
+
+  --popover:    var(--pure-white);
+  --popover-fg: var(--neutral-1);
+
+  --primary:    var(--neutral-1);
+  --primary-fg: var(--pure-white);
+  --secondary:  var(--orange);
+  --secondary-fg: var(--neutral-1);
+
+  --muted:      var(--neutral-12);
+  --muted-fg:   var(--neutral-5);
+  --accent:     var(--neutral-12);
+  --accent-fg:  var(--neutral-1);
+
+  --border:     var(--neutral-11);
+  --input:      var(--neutral-10);
+  --ring:       var(--neutral-1);
+
+  --sidebar:           var(--neutral-13);
+  --sidebar-fg:        var(--neutral-3);
+  --sidebar-primary:   var(--neutral-1);
+  --sidebar-primary-fg:var(--pure-white);
+  --sidebar-accent:    var(--neutral-12);
+  --sidebar-accent-fg: var(--neutral-3);
+  --sidebar-border:    var(--cool-1);
+  --sidebar-ring:      var(--neutral-1);
+
+  /* -------- Chart slots -------- */
+  --chart-1: var(--yellow);
+  --chart-2: var(--green);
+  --chart-3: var(--orange);
+  --chart-4: var(--blue-1);
+  --chart-5: var(--warm-red);
+
+  /* -------- Type families --------
+     Product ships Geist Sans + Geist Mono (next/font/google). */
+  --font-sans: 'Geist', ui-sans-serif, system-ui, -apple-system, 'Segoe UI',
+               Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: 'Geist Mono', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+
+  /* -------- Type scale (built from tailwind usage in repo) -------- */
+  --fs-xs:    0.75rem;    /* 12px  — badges, fine print */
+  --fs-sm:    0.875rem;   /* 14px  — body small, table cells */
+  --fs-base:  1rem;       /* 16px  — body */
+  --fs-lg:    1.125rem;   /* 18px  — page h1 in header */
+  --fs-xl:    1.375rem;   /* 22px  — tagline (Powered by MorAI) */
+  --fs-2xl:   1.75rem;    /* 28px */
+  --fs-3xl:   2.5rem;     /* 40px  — login headline "Spend Intelligence" */
+  --fs-4xl:   3.5rem;
+
+  --lh-tight: 1.15;
+  --lh-snug:  1.3;
+  --lh-body:  1.5;
+
+  --fw-regular:  400;
+  --fw-medium:   500;
+  --fw-semibold: 600;
+  --fw-bold:     700;
+
+  /* -------- Elevation -------- */
+  --shadow-xs: 0 1px 2px 0 rgba(13,13,13,0.04);
+  --shadow-sm: 0 1px 3px 0 rgba(13,13,13,0.06), 0 1px 2px -1px rgba(13,13,13,0.04);
+  --shadow-md: 0 4px 6px -1px rgba(13,13,13,0.08), 0 2px 4px -2px rgba(13,13,13,0.06);
+  --shadow-lg: 0 10px 15px -3px rgba(13,13,13,0.08), 0 4px 6px -4px rgba(13,13,13,0.05);
+
+  /* -------- Spacing (tailwind-style 4px base) -------- */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-12: 3rem;
+}
+
+/* -------- Semantic element defaults -------- */
+html, body {
+  font-family: var(--font-sans);
+  font-size:   var(--fs-base);
+  line-height: var(--lh-body);
+  color: var(--foreground);
+  background: var(--background);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1 { font-size: var(--fs-3xl); font-weight: var(--fw-semibold); line-height: var(--lh-tight); letter-spacing: -0.01em; }
+h2 { font-size: var(--fs-2xl); font-weight: var(--fw-semibold); line-height: var(--lh-snug); letter-spacing: -0.005em; }
+h3 { font-size: var(--fs-xl);  font-weight: var(--fw-semibold); line-height: var(--lh-snug); }
+h4 { font-size: var(--fs-lg);  font-weight: var(--fw-semibold); line-height: var(--lh-snug); }
+h5 { font-size: var(--fs-base); font-weight: var(--fw-semibold); line-height: var(--lh-snug); }
+
+p, .body { font-size: var(--fs-base); line-height: var(--lh-body); color: var(--foreground); }
+.body-sm  { font-size: var(--fs-sm);  line-height: var(--lh-body); }
+.body-xs  { font-size: var(--fs-xs);  line-height: var(--lh-body); }
+.caption  { font-size: var(--fs-xs);  color: var(--neutral-6); letter-spacing: 0.02em; }
+
+code, pre, .mono {
+  font-family: var(--font-mono);
+  font-size: 0.875em;
+}
+
+a { color: var(--neutral-1); text-decoration: underline; text-underline-offset: 4px; }
+a:hover { color: var(--warm-red); }
+
+/* Foreground utility aliases  */
+.fg-1   { color: var(--neutral-1); }      /* primary text */
+.fg-2   { color: var(--neutral-3); }      /* secondary text */
+.fg-mute { color: var(--neutral-6); }     /* muted / caption */
+.fg-brand { color: var(--warm-red); }     /* brand-accent callouts */
