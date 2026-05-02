@@ -212,6 +212,10 @@ jobs:
         id: deploy_api
         run: |
           set -euo pipefail
+          # ACR admin user is disabled (correct security posture), so
+          # `az containerapp up` cannot fetch registry credentials. Pass an
+          # AcrPull-scoped user-assigned managed identity instead. The
+          # identity is pre-provisioned and granted AcrPull on the ACR.
           az containerapp up \
             --name "${API_APP}" \
             --resource-group "${RG}" \
@@ -219,7 +223,9 @@ jobs:
             --image "${API_IMAGE}" \
             --target-port 8000 \
             --ingress external \
-            --registry-server '${{ vars.ACR_LOGIN_SERVER }}'
+            --registry-server '${{ vars.ACR_LOGIN_SERVER }}' \
+            --user-assigned '${{ vars.AZURE_USER_MANAGED_IDENTITY_RESOURCE_ID }}' \
+            --registry-identity '${{ vars.AZURE_USER_MANAGED_IDENTITY_RESOURCE_ID }}'
           API_FQDN=$(az containerapp show \
             --name "${API_APP}" --resource-group "${RG}" \
             --query 'properties.configuration.ingress.fqdn' -o tsv)
@@ -242,6 +248,8 @@ jobs:
         run: |
           set -euo pipefail
           API_URL='${{ steps.deploy_api.outputs.api_url }}'
+          # See deploy_api step for the rationale on --user-assigned /
+          # --registry-identity. Same managed identity, same AcrPull role.
           az containerapp up \
             --name "${UI_APP}" \
             --resource-group "${RG}" \
@@ -250,6 +258,8 @@ jobs:
             --target-port 3000 \
             --ingress external \
             --registry-server '${{ vars.ACR_LOGIN_SERVER }}' \
+            --user-assigned '${{ vars.AZURE_USER_MANAGED_IDENTITY_RESOURCE_ID }}' \
+            --registry-identity '${{ vars.AZURE_USER_MANAGED_IDENTITY_RESOURCE_ID }}' \
             --env-vars "NEXT_PUBLIC_API_URL=${API_URL}"
           UI_FQDN=$(az containerapp show \
             --name "${UI_APP}" --resource-group "${RG}" \
