@@ -11,7 +11,14 @@
 # .github/workflows/verify-oidc.yml (MLI-156).
 #
 # Open design questions answered in the MLI-162 summary comment:
-#   Q1 (create-or-update strategy) -> `az containerapp up`
+#   Q1 (create-or-update strategy) -> originally `az containerapp up`; the
+#                                     escalation trigger fired (PR #11 run
+#                                     proved `up` rejects --user-assigned /
+#                                     --registry-identity empirically). Now an
+#                                     idempotent `show` -> `create` else
+#                                     `update` pattern. The flags exist on
+#                                     `containerapp create` / `update` (verified
+#                                     against Azure CLI extension custom.py).
 #   Q2 (Container App names)       -> ca-mmfp-{api,ui}-dev
 #   Q3 (UI -> API wiring)          -> external FQDN of the API, set as
 #                                     NEXT_PUBLIC_API_URL runtime env var on the
@@ -203,29 +210,37 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      # Q1 decision: `az containerapp up` is idempotent and handles
-      # create-on-first-run + update-on-subsequent in a single command. For
-      # Slice 1 dev that's the right level of complexity (P1 — earn complexity).
-      # Revisit when we need: per-revision traffic splits, custom probes,
-      # multiple env-specific config sets, or IaC-managed scale rules.
+      # Q1 escalation: `az containerapp up` does NOT in practice accept
+      # --user-assigned / --registry-identity (empirically verified by PR #11's
+      # failed run, despite the extension source suggesting otherwise). We've
+      # split into an idempotent show -> create / update pattern. Both
+      # `containerapp create` and `containerapp update` accept the identity
+      # flags. Revisit when we need per-revision traffic splits, custom probes,
+      # multi-env config sets, or IaC-managed scale rules.
       - name: Deploy mmfp-api
         id: deploy_api
         run: |
           set -euo pipefail
-          # ACR admin user is disabled (correct security posture), so
-          # `az containerapp up` cannot fetch registry credentials. Pass an
-          # AcrPull-scoped user-assigned managed identity instead. The
-          # identity is pre-provisioned and granted AcrPull on the ACR.
-          az containerapp up \
-            --name "${API_APP}" \
-            --resource-group "${RG}" \
-            --environment "${CAE}" \
-            --image "${API_IMAGE}" \
-            --target-port 8000 \
-            --ingress external \
-            --registry-server '${{ vars.ACR_LOGIN_SERVER }}' \
-            --user-assigned '${{ vars.AZURE_USER_MANAGED_IDENTITY_RESOURCE_ID }}' \
-            --registry-identity '${{ vars.AZURE_USER_MANAGED_IDENTITY_RESOURCE_ID }}'
+          # ACR admin user is disabled (correct security posture), so registry
+          # auth uses an AcrPull-scoped user-assigned managed identity that is
+          # pre-provisioned and role-assigned out-of-band.
+          if az containerapp show --name "${API_APP}" --resource-group "${RG}" >/dev/null 2>&1; then
+            az containerapp update \
+              --name "${API_APP}" \
+              --resource-group "${RG}" \
+              --image "${API_IMAGE}"
+          else
+            az containerapp create \
+              --name "${API_APP}" \
+              --resource-group "${RG}" \
+              --environment "${CAE}" \
+              --image "${API_IMAGE}" \
+              --target-port 8000 \
+              --ingress external \
+              --registry-server '${{ vars.ACR_LOGIN_SERVER }}' \
+              --registry-identity '${{ vars.AZURE_USER_MANAGED_IDENTITY_RESOURCE_ID }}' \
+              --user-assigned '${{ vars.AZURE_USER_MANAGED_IDENTITY_RESOURCE_ID }}'
+          fi
           API_FQDN=$(az containerapp show \
             --name "${API_APP}" --resource-group "${RG}" \
             --query 'properties.configuration.ingress.fqdn' -o tsv)
@@ -250,17 +265,29 @@ jobs:
           API_URL='${{ steps.deploy_api.outputs.api_url }}'
           # See deploy_api step for the rationale on --user-assigned /
           # --registry-identity. Same managed identity, same AcrPull role.
-          az containerapp up \
-            --name "${UI_APP}" \
-            --resource-group "${RG}" \
-            --environment "${CAE}" \
-            --image "${UI_IMAGE}" \
-            --target-port 3000 \
-            --ingress external \
-            --registry-server '${{ vars.ACR_LOGIN_SERVER }}' \
-            --user-assigned '${{ vars.AZURE_USER_MANAGED_IDENTITY_RESOURCE_ID }}' \
-            --registry-identity '${{ vars.AZURE_USER_MANAGED_IDENTITY_RESOURCE_ID }}' \
-            --env-vars "NEXT_PUBLIC_API_URL=${API_URL}"
+          # Note: `containerapp create` uses --env-vars; `containerapp update`
+          # uses --set-env-vars. Verified against the Azure CLI extension
+          # custom.py (`create_containerapp` accepts env_vars,
+          # `update_containerapp_logic` accepts set_env_vars).
+          if az containerapp show --name "${UI_APP}" --resource-group "${RG}" >/dev/null 2>&1; then
+            az containerapp update \
+              --name "${UI_APP}" \
+              --resource-group "${RG}" \
+              --image "${UI_IMAGE}" \
+              --set-env-vars "NEXT_PUBLIC_API_URL=${API_URL}"
+          else
+            az containerapp create \
+              --name "${UI_APP}" \
+              --resource-group "${RG}" \
+              --environment "${CAE}" \
+              --image "${UI_IMAGE}" \
+              --target-port 3000 \
+              --ingress external \
+              --registry-server '${{ vars.ACR_LOGIN_SERVER }}' \
+              --registry-identity '${{ vars.AZURE_USER_MANAGED_IDENTITY_RESOURCE_ID }}' \
+              --user-assigned '${{ vars.AZURE_USER_MANAGED_IDENTITY_RESOURCE_ID }}' \
+              --env-vars "NEXT_PUBLIC_API_URL=${API_URL}"
+          fi
           UI_FQDN=$(az containerapp show \
             --name "${UI_APP}" --resource-group "${RG}" \
             --query 'properties.configuration.ingress.fqdn' -o tsv)
