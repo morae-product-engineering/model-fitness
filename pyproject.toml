@@ -2,8 +2,22 @@
 name = "mmfp"
 version = "0.0.1"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.29",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["platform*"]
+
+[tool.pytest.ini_options]
+# Repo root must be on sys.path so pytest can resolve the `platform` namespace
+# package. Python 3.13 silently skips .pth files whose names start with "__",
+# which breaks the editable-install meta-path hook on 3.13 only; PYTHONPATH is
+# the workaround until a compatible setuptools editable format lands.
+pythonpath = ["."]
 
 [build-system]
 requires = ["setuptools>=68"]
-build-backend = "setuptools.backends.legacy:build"
+build-backend = "setuptools.build_meta"
