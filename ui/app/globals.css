@@ -1,0 +1,15 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Matches prototype token: --background / --foreground */
+:root {
+  --background: #ffffff;
+  --foreground: #0d0d0d;
+}
+
+html,
+body {
+  background: var(--background);
+  color: var(--foreground);
+}
