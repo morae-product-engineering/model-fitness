@@ -71,12 +71,14 @@ workspace "Morae Model Fitness Platform" "MMFP scores LLM candidates against a v
         # MatrixRun: system-level flow from Steward triggering a run through to scorecard delivery.
         # Container-level detail (UI->API->DB) lives in the Container view, not here.
         # dynamic * scopes to software systems and people only — no containers allowed.
+        # Step descriptions are omitted — Structurizr infers them from the model relationship
+        # descriptions. Adding inline descriptions here would redefine the relationship,
+        # causing a "relationship already exists" parse error.
         dynamic * "MatrixRun" "How a matrix run flows from trigger to evidence." {
-            steward -> mmfp "Kicks off matrix run via UI"
-            mmfp -> foundry "Invokes candidate LLM"
-            mmfp -> testrail "Posts e2e evidence after run"
-            mmfp -> steward "Returns scorecard"
-            autoLayout lr
+            steward -> mmfp
+            mmfp -> foundry
+            mmfp -> testrail
+            autolayout lr
         }
 
         styles {
