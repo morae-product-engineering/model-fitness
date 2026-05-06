@@ -90,11 +90,11 @@ When in doubt: one-line message, no preamble, "OK to proceed?". Wayne replies in
 
 Each Jira sub-task has a `## Recommended model` field. Translate it:
 
-| Recommended model | Subagent          | When                                     |
-| ----------------- | ----------------- | ---------------------------------------- |
-| Haiku             | `junior-pat`      | Mechanical edits, no thinking required   |
-| Sonnet            | `senior-morgan`   | Well-defined sub-tasks, clear specs      |
-| Opus              | `expert-ellis`    | Ambiguous specs, design, novel logic     |
+| Recommended model | Subagent           | When                                     |
+| ----------------- | ------------------ | ---------------------------------------- |
+| Haiku             | `helper`           | Mechanical edits, no thinking required   |
+| Sonnet            | `engineer`         | Well-defined sub-tasks, clear specs      |
+| Opus              | `senior-engineer`  | Ambiguous specs, design, novel logic     |
 
 If you're running as the wrong tier — the prompt is more ambiguous than the recommended model expected — say so at the top of your response and ask whether to escalate. Don't push through.
 
