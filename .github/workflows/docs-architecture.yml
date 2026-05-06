@@ -109,19 +109,31 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y plantuml
 
+      # Format must be `plantuml/c4plantuml` — confirmed against
+      # structurizr/cli's ExportCommand.java. Bare `c4plantuml` is not
+      # registered and silently logs "unknown export format" while exiting 0.
+      # Filenames are `structurizr-<workspaceId>-<viewKey>.puml`.
       - name: Export to C4-PlantUML
         run: |
           set -euo pipefail
           mkdir -p /tmp/puml
           structurizr.sh export \
             -workspace docs/architecture/workspace.dsl \
-            -format c4plantuml \
+            -format plantuml/c4plantuml \
             -output /tmp/puml/
           ls -la /tmp/puml/
+          # Fail fast here too, so a future format-name regression surfaces at
+          # the export step rather than as a confusing PlantUML "No diagram
+          # found" further down.
+          if ! ls /tmp/puml/*.puml >/dev/null 2>&1; then
+            echo "::error::structurizr export produced no .puml files. Check the format name (must be plantuml/c4plantuml)." >&2
+            exit 1
+          fi
 
       - name: Render SVG via PlantUML
         run: |
           set -euo pipefail
+          shopt -s nullglob
           mkdir -p "$GITHUB_WORKSPACE/docs/architecture/exports/svg"
           for f in /tmp/puml/*.puml; do
             plantuml -tsvg -o "$GITHUB_WORKSPACE/docs/architecture/exports/svg/" "$f"
@@ -131,6 +143,7 @@ jobs:
       - name: Render PNG via PlantUML
         run: |
           set -euo pipefail
+          shopt -s nullglob
           mkdir -p "$GITHUB_WORKSPACE/docs/architecture/exports/png"
           for f in /tmp/puml/*.puml; do
             plantuml -tpng -o "$GITHUB_WORKSPACE/docs/architecture/exports/png/" "$f"
