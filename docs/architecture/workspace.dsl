@@ -93,3 +93,4 @@ workspace "Morae Model Fitness Platform" "MMFP scores LLM candidates against a v
     }
 
 }
+ # adds a trailing blank line, harmless

@@ -1,0 +1,328 @@
+# Architecture diagrams as code — Phase 1.
+#
+# When docs/architecture/workspace.dsl changes, this workflow:
+#   1. Validates the DSL parses (Structurizr CLI).
+#   2. Renders all defined views to PNG and SVG.
+#   3. On main: commits rendered exports back to docs/architecture/exports/.
+#   4. On main: publishes exports/ to GitHub Pages.
+#
+# On pull_request: validate-and-render runs but skips the commit-back; rendered
+# exports are uploaded as a workflow artifact for pre-merge preview.
+#
+# Recursive trigger: the auto-commit message ends with `[skip ci]` so the
+# subsequent push to main does not re-fire this workflow.
+#
+# Phase 2 (Confluence sync) is out of scope here — separate ticket.
+
+name: Docs - Architecture
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/architecture/workspace.dsl'
+      - '.github/workflows/docs-architecture.yml'
+  pull_request:
+    paths:
+      - 'docs/architecture/workspace.dsl'
+      - '.github/workflows/docs-architecture.yml'
+  workflow_dispatch:
+
+# Default permissions are read-only; jobs opt into more as needed.
+permissions:
+  contents: read
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Job 1: validate the DSL and render all views to PNG + SVG.
+  # On push to main, commit the rendered exports back. On PR, upload them as a
+  # workflow artifact so reviewers can preview the diagrams before merging.
+  # ---------------------------------------------------------------------------
+  validate-and-render:
+    name: Validate and render
+    runs-on: ubuntu-latest
+    permissions:
+      # `contents: write` is only used by the auto-commit step, which is gated
+      # to push-to-main. Declared at job level (not workflow level) to keep the
+      # blast radius minimal.
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      # Cache the Structurizr CLI install so we don't re-download every run.
+      # Key is stable ("structurizr-cli-latest") because we always pull the
+      # latest release; if that ever needs pinning, bump the key suffix.
+      - name: Cache Structurizr CLI
+        id: cache-structurizr
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.tool_cache }}/structurizr-cli
+          key: structurizr-cli-latest
+
+      - name: Install Structurizr CLI
+        if: steps.cache-structurizr.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          INSTALL_DIR="${{ runner.tool_cache }}/structurizr-cli"
+          mkdir -p "${INSTALL_DIR}"
+          curl -sSL -o /tmp/structurizr-cli.zip \
+            https://github.com/structurizr/cli/releases/latest/download/structurizr-cli.zip
+          unzip -q /tmp/structurizr-cli.zip -d "${INSTALL_DIR}"
+          chmod +x "${INSTALL_DIR}/structurizr.sh"
+
+      - name: Add Structurizr CLI to PATH
+        run: echo "${{ runner.tool_cache }}/structurizr-cli" >> "$GITHUB_PATH"
+
+      - name: Validate workspace.dsl
+        run: |
+          set -euo pipefail
+          # Capture stderr so we can surface it in the step summary on failure.
+          # Then re-emit it to the job log and exit nonzero so the check fails.
+          if ! structurizr.sh validate -workspace docs/architecture/workspace.dsl 2> /tmp/structurizr-validate.err; then
+            {
+              echo "### Structurizr DSL validation failed"
+              echo ""
+              echo '```'
+              cat /tmp/structurizr-validate.err
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            cat /tmp/structurizr-validate.err >&2
+            exit 1
+          fi
+
+      # Structurizr CLI's `export` doesn't accept `-format png` or `-format svg`
+      # as valid format names — those silently log "unknown export format" and
+      # the CLI still exits 0 (see PR #16 first run). Valid `-format` values are
+      # exporter names (plantuml, c4plantuml, mermaid, dot, etc.). The render
+      # chain therefore goes via C4-PlantUML: Structurizr CLI emits .puml files,
+      # then PlantUML renders each .puml to SVG and PNG. The verification step
+      # below fails the job if either output dir ends up empty — that's the
+      # fitness function for this pipeline.
+      # PlantUML's C4 diagrams render through Graphviz; install it from apt.
+      - name: Install Graphviz
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y graphviz
+
+      # Use the upstream PlantUML jar rather than apt's plantuml. The Ubuntu
+      # package lags well behind upstream and on 24.04 failed to parse the
+      # C4-PlantUML stdlib includes Structurizr CLI emits. Pin to a recent
+      # stable release; bump deliberately.
+      - name: Install PlantUML
+        run: |
+          set -euo pipefail
+          PLANTUML_VERSION="1.2024.7"
+          PLANTUML_JAR="${RUNNER_TOOL_CACHE}/plantuml/plantuml.jar"
+          mkdir -p "$(dirname "${PLANTUML_JAR}")"
+          curl -sSL -o "${PLANTUML_JAR}" \
+            "https://github.com/plantuml/plantuml/releases/download/v${PLANTUML_VERSION}/plantuml-${PLANTUML_VERSION}.jar"
+          # Wrapper so subsequent steps can call `plantuml` like the apt binary.
+          cat > "${RUNNER_TOOL_CACHE}/plantuml/plantuml" <<EOF
+          #!/usr/bin/env bash
+          exec java -Djava.awt.headless=true -jar "${PLANTUML_JAR}" "\$@"
+          EOF
+          chmod +x "${RUNNER_TOOL_CACHE}/plantuml/plantuml"
+          echo "${RUNNER_TOOL_CACHE}/plantuml" >> "$GITHUB_PATH"
+          # Sanity-check the install.
+          java -jar "${PLANTUML_JAR}" -version
+
+      # Format must be `plantuml/c4plantuml` — confirmed against
+      # structurizr/cli's ExportCommand.java. Bare `c4plantuml` is not
+      # registered and silently logs "unknown export format" while exiting 0.
+      # Filenames are `structurizr-<workspaceId>-<viewKey>.puml`.
+      - name: Export to C4-PlantUML
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/puml
+          structurizr.sh export \
+            -workspace docs/architecture/workspace.dsl \
+            -format plantuml/c4plantuml \
+            -output /tmp/puml/
+          ls -la /tmp/puml/
+          # Fail fast here too, so a future format-name regression surfaces at
+          # the export step rather than as a confusing PlantUML "No diagram
+          # found" further down.
+          if ! ls /tmp/puml/*.puml >/dev/null 2>&1; then
+            echo "::error::structurizr export produced no .puml files. Check the format name (must be plantuml/c4plantuml)." >&2
+            exit 1
+          fi
+          # Echo one .puml's head so any future render-time failure has the
+          # generated input visible in the same log without needing artifacts.
+          for f in /tmp/puml/*.puml; do
+            echo "--- head of $f ---"
+            head -25 "$f"
+            break
+          done
+
+      - name: Render SVG via PlantUML
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          mkdir -p "$GITHUB_WORKSPACE/docs/architecture/exports/svg"
+          for f in /tmp/puml/*.puml; do
+            plantuml -tsvg -o "$GITHUB_WORKSPACE/docs/architecture/exports/svg/" "$f"
+          done
+          ls -la "$GITHUB_WORKSPACE/docs/architecture/exports/svg/"
+
+      - name: Render PNG via PlantUML
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          mkdir -p "$GITHUB_WORKSPACE/docs/architecture/exports/png"
+          for f in /tmp/puml/*.puml; do
+            plantuml -tpng -o "$GITHUB_WORKSPACE/docs/architecture/exports/png/" "$f"
+          done
+          ls -la "$GITHUB_WORKSPACE/docs/architecture/exports/png/"
+
+      # Fitness function: would have caught today's silent failure on PR #16.
+      # If either renderer produces zero files, fail loudly with a message that
+      # points the next maintainer at the likely cause rather than letting the
+      # job go green with empty output dirs.
+      - name: Verify renders produced files
+        run: |
+          set -euo pipefail
+          svg_count=$(find docs/architecture/exports/svg -maxdepth 1 -name '*.svg' -type f | wc -l)
+          png_count=$(find docs/architecture/exports/png -maxdepth 1 -name '*.png' -type f | wc -l)
+          echo "SVG files: ${svg_count}"
+          echo "PNG files: ${png_count}"
+          if [ "${svg_count}" -eq 0 ] || [ "${png_count}" -eq 0 ]; then
+            echo "::error::Render produced no files (svg=${svg_count}, png=${png_count}). Check the Export to C4-PlantUML / PlantUML render steps above." >&2
+            exit 1
+          fi
+
+      # Generate a static index.html that lists every rendered view. Each view
+      # is shown via <object data="..."> referencing the SVG — this renders
+      # reliably from a static GitHub Pages site and degrades gracefully if a
+      # browser can't display SVG. PNG counterparts are linked beside the SVG
+      # for download.
+      - name: Generate index.html
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import html
+          import re
+          from pathlib import Path
+
+          svg_dir = Path("docs/architecture/exports/svg")
+          png_dir = Path("docs/architecture/exports/png")
+          out = Path("docs/architecture/exports/index.html")
+
+          # Files come from PlantUML rendering of Structurizr CLI's c4plantuml
+          # exporter. Filenames are the source .puml stem — historically
+          # `structurizr-<ViewKey>.puml` (older CLI) or
+          # `structurizr-<WorkspaceName>-<ViewKey>.puml` (newer CLI). We don't
+          # hardcode the prefix; we strip a leading "structurizr-" if present
+          # and then humanize CamelCase view keys for display.
+          def humanize(stem: str) -> str:
+              s = stem
+              if s.startswith("structurizr-"):
+                  s = s[len("structurizr-"):]
+              # If a workspace-name segment is present, drop it. The view key
+              # is the trailing segment after the last '-'.
+              if "-" in s:
+                  s = s.rsplit("-", 1)[-1]
+              # CamelCase -> "Camel Case"; leave already-spaced names alone.
+              s = re.sub(r"(?<!^)(?=[A-Z])", " ", s)
+              return s.strip() or stem
+
+          svg_files = sorted(p.name for p in svg_dir.glob("*.svg"))
+
+          parts = [
+              "<!DOCTYPE html>",
+              "<html lang=\"en\"><head><meta charset=\"utf-8\">",
+              "<title>MMFP Architecture Diagrams</title>",
+              "<style>body{font-family:system-ui,sans-serif;max-width:1100px;",
+              "margin:2rem auto;padding:0 1rem;color:#222}",
+              "h1{margin-bottom:0.25rem}p.lede{color:#555;margin-top:0}",
+              "h2{margin-top:2.5rem;border-bottom:1px solid #ddd;padding-bottom:0.25rem}",
+              "object,img{max-width:100%;height:auto;border:1px solid #eee}",
+              "a{color:#0366d6}.links{font-size:0.9rem;color:#555}</style>",
+              "</head><body>",
+              "<h1>MMFP Architecture Diagrams</h1>",
+              "<p class=\"lede\">Rendered from <code>docs/architecture/workspace.dsl</code> by CI. ",
+              "Source of truth: the DSL file in the repo.</p>",
+          ]
+
+          for svg in svg_files:
+              stem = svg[:-4]
+              png = f"{stem}.png"
+              has_png = (png_dir / png).exists()
+              title = humanize(stem)
+              parts.append(f"<h2>{html.escape(title)}</h2>")
+              parts.append(
+                  f'<object data="svg/{html.escape(svg)}" type="image/svg+xml">'
+                  f'<img src="png/{html.escape(png)}" alt="{html.escape(title)}"></object>'
+              )
+              links = [f'<a href="svg/{html.escape(svg)}">SVG</a>']
+              if has_png:
+                  links.append(f'<a href="png/{html.escape(png)}">PNG</a>')
+              parts.append(f'<p class="links">Download: {" &middot; ".join(links)}</p>')
+
+          parts.append("</body></html>")
+          out.write_text("\n".join(parts), encoding="utf-8")
+          print(f"Wrote {out} with {len(svg_files)} view(s).")
+          PY
+
+      # On pull_request: don't commit; surface the rendered exports as a
+      # downloadable artifact so reviewers can preview before merge.
+      - name: Upload exports artifact (PR preview)
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: architecture-exports
+          path: docs/architecture/exports/
+          if-no-files-found: error
+          retention-days: 14
+
+      # On push to main: commit re-rendered exports back. The action skips the
+      # commit if the working tree is clean (no diff under the file_pattern),
+      # so this is a no-op when nothing changed. The `[skip ci]` suffix in the
+      # commit message prevents this push from re-firing the workflow.
+      #
+      # Pinned to commit SHA (v5 -> b863ae1933cb653a53c021fe36dbb774e1fb9403)
+      # per the repo's hard rule on third-party action pinning.
+      - name: Auto-commit rendered exports
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: stefanzweifel/git-auto-commit-action@b863ae1933cb653a53c021fe36dbb774e1fb9403
+        with:
+          commit_message: 'docs(architecture): re-render exports [skip ci]'
+          file_pattern: 'docs/architecture/exports/**'
+
+  # ---------------------------------------------------------------------------
+  # Job 2: deploy the rendered exports to GitHub Pages. Only on push to main.
+  # Wayne must enable Pages once (Settings -> Pages -> Source = "GitHub
+  # Actions"); the workflow can't enable it for the repo.
+  # ---------------------------------------------------------------------------
+  deploy-pages:
+    name: Deploy to GitHub Pages
+    needs: validate-and-render
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+      contents: read
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      # Re-checkout main so we pick up the auto-commit from validate-and-render.
+      # Without ref:main, the runner would still be at the original push SHA.
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/architecture/exports/
+
+      - id: deployment
+        uses: actions/deploy-pages@v4
