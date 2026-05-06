@@ -46,6 +46,12 @@ jobs:
       # to push-to-main. Declared at job level (not workflow level) to keep the
       # blast radius minimal.
       contents: write
+      # `actions: write` is required by `createDispatchEvent` (the
+      # "Trigger Confluence sync" step). `contents: write` alone is not
+      # sufficient — the GH REST docs require `actions: write` for
+      # repository_dispatch. Like `contents: write`, this is also gated
+      # to push-to-main usage by the step's `if:` guard.
+      actions: write
     steps:
       - uses: actions/checkout@v4
 

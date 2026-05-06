@@ -43,6 +43,7 @@ from pathlib import Path
 from typing import Any
 
 import requests
+from bs4 import BeautifulSoup
 
 # The three rendered views we expect Phase 1 to have produced. Names match
 # PlantUML's filename convention `structurizr-<ViewKey>.svg`. Renaming a view
@@ -78,13 +79,10 @@ EMBED_BLOCK = (
     '<ac:image><ri:attachment ri:filename="structurizr-MatrixRun.svg" /></ac:image>'
 )
 
-# Heading we replace on first run. Two forms because the existing page may
-# have been authored either via storage XML (heavier `<h2>...</h2>` tag) or
-# via the editor's HTML output — both are functionally equivalent here.
-HEADING_TARGETS: tuple[str, ...] = (
-    "<h2>System context</h2>",
-    "<h2>System Context</h2>",
-)
+# Heading text we replace on first run. Match is case-insensitive against
+# the stripped text content of any <h2>, so attributes like
+# `<h2 id="System-context">` or whitespace variations don't trip the swap.
+HEADING_TEXT = "system context"
 
 
 @dataclass(frozen=True)
@@ -318,16 +316,56 @@ def verify_svg_files() -> list[Path]:
 def insert_embed_block(body: str) -> tuple[str, bool]:
     """Insert the embed block in place of the System context heading.
 
-    Returns (new_body, replaced_in_place). If the heading was found, the block
-    replaces it. If not, the block is appended to the end of the body — log a
-    warning at the call site so first-run robustness does not silently mutate
-    a surprising layout.
+    Parses the body with BeautifulSoup's html.parser and finds an <h2> whose
+    stripped text equals "System context" (case-insensitive). When found, the
+    h2 AND every following sibling up to (but not including) the next <h2>
+    are removed, and the embed block is inserted at that position. If no such
+    heading exists, the embed block is appended and the caller is expected to
+    log a warning so a surprising layout doesn't pass silently.
+
+    Why html.parser and not lxml-xml: Confluence's storage-format fragment
+    returned by the API does not declare the `ac:` and `ri:` namespaces, so
+    a strict XML parser refuses it without a synthetic-root wrap/unwrap
+    dance. html.parser treats `ac:image` and `ri:attachment` as opaque tag
+    names and round-trips them losslessly — that's all we need here. The
+    only cosmetic side effect is that self-closing tags like
+    `<ri:attachment ... />` are emitted as `<ri:attachment ...></ri:attachment>`,
+    which Confluence accepts equivalently.
+
+    Returns (new_body, replaced_in_place).
     """
-    for target in HEADING_TARGETS:
-        if target in body:
-            # Replace only the first occurrence; the heading is expected once.
-            return body.replace(target, EMBED_BLOCK, 1), True
-    return body + EMBED_BLOCK, False
+    soup = BeautifulSoup(body, "html.parser")
+    target = None
+    for h2 in soup.find_all("h2"):
+        if h2.get_text(strip=True).casefold() == HEADING_TEXT:
+            target = h2
+            break
+    if target is None:
+        return body + EMBED_BLOCK, False
+
+    # Collect every sibling after the target heading up to (but not
+    # including) the next h2. Snapshot first to avoid mutating during walk.
+    to_remove: list[Any] = []
+    sib = target.next_sibling
+    while sib is not None:
+        nxt = sib.next_sibling
+        if getattr(sib, "name", None) == "h2":
+            break
+        to_remove.append(sib)
+        sib = nxt
+
+    # Parse the embed block as a fragment in the same parser so it slots in
+    # as native nodes rather than a string blob.
+    embed_fragment = BeautifulSoup(EMBED_BLOCK, "html.parser")
+    for node in list(embed_fragment.children):
+        target.insert_before(node)
+    for node in to_remove:
+        node.extract()
+    target.extract()
+
+    # formatter=None keeps the rest of the body byte-stable: no entity
+    # munging, no pretty-printing of unrelated nodes.
+    return soup.encode(formatter=None).decode("utf-8"), True
 
 
 def write_step_summary(lines: list[str]) -> None:
@@ -400,6 +438,28 @@ def main() -> int:
             else "edited (appended; heading not found)"
         )
         print(f"Body updated to version {current_version + 1}.")
+
+        # Sentinel-survival check. If the PUT succeeded but Confluence
+        # silently stripped or transformed our embed block (e.g. an XHTML
+        # validation rejection that the REST endpoint accepts but the
+        # storage layer drops), the body-edit-once contract is broken: the
+        # next run will see no sentinel and edit the body again, which is
+        # exactly the foot-gun the contract exists to prevent. Re-fetch and
+        # fail loudly so a human catches it on first run rather than
+        # discovering it after multiple churning syncs.
+        verification = client.get_page_storage_v1()
+        verified_body = (
+            verification.get("body", {}).get("storage", {}).get("value", "") or ""
+        )
+        if SENTINEL not in verified_body:
+            raise SystemExit(
+                "Body-edit-once contract violation: PUT succeeded but the "
+                f"sentinel '{SENTINEL}' is not present in the page body when "
+                "re-fetched. Confluence may have stripped or transformed our "
+                "embed block. Inspect the page in storage format and adjust "
+                "EMBED_BLOCK before re-running."
+            )
+        print("Sentinel verified present in re-fetched body.")
 
     page_url = f"{cfg.base_url}/wiki/spaces/MLI/pages/{cfg.page_id}"
     write_step_summary(

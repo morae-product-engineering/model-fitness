@@ -83,7 +83,11 @@ jobs:
         run: |
           set -euo pipefail
           python -m pip install --upgrade pip
-          pip install requests==2.32.3
+          # beautifulsoup4 is used to robustly find/replace the "System
+          # context" heading in the page's storage-format body. html.parser
+          # (stdlib) handles Confluence's undeclared ac:/ri: namespace
+          # prefixes without a synthetic-root wrap, so no lxml needed.
+          pip install requests==2.32.3 beautifulsoup4==4.12.3
 
       # Sanity-check that the SVGs we expect to publish actually exist at this
       # commit. Phase 1's render step already fails the upstream job if it
