@@ -50,7 +50,7 @@ jobs:
   # ---------------------------------------------------------------------------
 
   lint-python:
-    name: Lint Python (ruff)
+    name: Lint Python
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -60,14 +60,14 @@ jobs:
           python-version: "3.12"
           cache: pip
 
-      - name: Install ruff
+      - name: Install Dev Dependencies
         run: pip install ".[dev]"
 
-      - name: ruff check
+      - name: Run Ruff
         run: ruff check .
 
   lint-typescript:
-    name: Lint TypeScript (next lint)
+    name: Lint TypeScript
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -81,11 +81,14 @@ jobs:
           cache: npm
           cache-dependency-path: ui/package-lock.json
 
-      - run: npm ci
-      - run: npm run lint
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Run Lint
+        run: npm run lint
 
   unit-python:
-    name: Unit tests (pytest)
+    name: Unit Tests (pytest)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -95,17 +98,17 @@ jobs:
           python-version: "3.12"
           cache: pip
 
-      - name: Install package + dev deps
+      - name: Install Package and Dev Dependencies
         run: pip install -e ".[dev]"
 
       # Note: package was renamed platform/ -> mmfp/ — the path below is the
       # current source root. Stale references to `pytest platform/` in older
       # ticket text are wrong.
-      - name: pytest
+      - name: Run Pytest
         run: pytest mmfp/
 
   unit-typescript:
-    name: Unit tests (vitest)
+    name: Unit Tests (vitest)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -116,15 +119,20 @@ jobs:
           cache: npm
           cache-dependency-path: package-lock.json
 
-      - run: npm ci
-      - run: npm test
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Run Tests
+        run: npm test
 
   # ---------------------------------------------------------------------------
   # Tier 2: build and push images to ACR
   # ---------------------------------------------------------------------------
 
   build-and-push:
-    name: Build and push images
+    # Logs in via OIDC, computes SHA-tagged image names, builds and pushes both
+    # the API and UI Docker images to ACR. On main branch, also re-tags :latest.
+    name: Build and Push Images
     needs: [lint-python, lint-typescript, unit-python, unit-typescript]
     runs-on: ubuntu-latest
     permissions:
@@ -136,17 +144,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Azure login (OIDC)
+      - name: Log In to Azure (OIDC)
         uses: azure/login@v2
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: ACR login
+      - name: Log In to ACR
         run: az acr login --name ${{ vars.ACR_NAME }}
 
-      - name: Compute image tags
+      - name: Compute Image Tags
         id: tags
         run: |
           set -euo pipefail
@@ -155,7 +163,7 @@ jobs:
           echo "api_image=${API_IMAGE}" >> "$GITHUB_OUTPUT"
           echo "ui_image=${UI_IMAGE}" >> "$GITHUB_OUTPUT"
 
-      - name: Build and push mmfp-api
+      - name: Build and Push API Image
         run: |
           set -euo pipefail
           API_IMAGE='${{ steps.tags.outputs.api_image }}'
@@ -169,7 +177,7 @@ jobs:
             docker push "${LATEST}"
           fi
 
-      - name: Build and push mmfp-ui
+      - name: Build and Push UI Image
         run: |
           set -euo pipefail
           UI_IMAGE='${{ steps.tags.outputs.ui_image }}'
@@ -187,7 +195,10 @@ jobs:
   # ---------------------------------------------------------------------------
 
   deploy-dev:
-    name: Deploy to dev
+    # Logs in via OIDC, then idempotently creates or updates both Container Apps
+    # in the dev environment. Resolves the API FQDN and wires it into the UI at
+    # runtime. Writes a deploy summary to the step summary.
+    name: Deploy Dev
     needs: build-and-push
     runs-on: ubuntu-latest
     permissions:
@@ -203,7 +214,7 @@ jobs:
       API_IMAGE: ${{ needs.build-and-push.outputs.api_image }}
       UI_IMAGE: ${{ needs.build-and-push.outputs.ui_image }}
     steps:
-      - name: Azure login (OIDC)
+      - name: Log In to Azure (OIDC)
         uses: azure/login@v2
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
@@ -217,7 +228,7 @@ jobs:
       # `containerapp create` and `containerapp update` accept the identity
       # flags. Revisit when we need per-revision traffic splits, custom probes,
       # multi-env config sets, or IaC-managed scale rules.
-      - name: Deploy mmfp-api
+      - name: Deploy API Container App
         id: deploy_api
         run: |
           set -euo pipefail
@@ -258,12 +269,12 @@ jobs:
       # time. Two options when that bites: (a) Docker --build-arg to pass the
       # URL into `next build` (accept env-specific images); or (b) move to a
       # runtime-fetched /config endpoint. Document in an ADR before the change.
-      - name: Deploy mmfp-ui
+      - name: Deploy UI Container App
         id: deploy_ui
         run: |
           set -euo pipefail
           API_URL='${{ steps.deploy_api.outputs.api_url }}'
-          # See deploy_api step for the rationale on --user-assigned /
+          # See "Deploy API Container App" step for the rationale on --user-assigned /
           # --registry-identity. Same managed identity, same AcrPull role.
           # Note: `containerapp create` uses --env-vars; `containerapp update`
           # uses --set-env-vars. Verified against the Azure CLI extension
@@ -293,7 +304,7 @@ jobs:
             --query 'properties.configuration.ingress.fqdn' -o tsv)
           echo "mmfp_url=https://${UI_FQDN}" >> "$GITHUB_OUTPUT"
 
-      - name: Summarise deploy
+      - name: Write Deploy Summary
         run: |
           {
             echo "### Dev deploy"
@@ -309,7 +320,9 @@ jobs:
   # ---------------------------------------------------------------------------
 
   e2e:
-    name: E2E (Playwright)
+    # Installs dependencies, launches Playwright against the deployed dev URL,
+    # and publishes both the TestRail run link and the HTML report as artifacts.
+    name: End-to-End Tests (Playwright)
     needs: deploy-dev
     runs-on: ubuntu-latest
     # Don't fail the workflow on a deliberate-red e2e (the slice spec proves
@@ -333,12 +346,13 @@ jobs:
           cache: npm
           cache-dependency-path: package-lock.json
 
-      - run: npm ci
+      - name: Install Dependencies
+        run: npm ci
 
-      - name: Install Playwright browsers
+      - name: Install Playwright Browsers
         run: npx playwright install --with-deps chromium
 
-      - name: Run Playwright
+      - name: Run End-to-End Tests
         # Run from repo root so the testrail-reporter writes
         # testrail-run-url.txt (it uses process.cwd()) at a path the next
         # step can find. The reporter exits 0 even if TestRail is degraded.
@@ -348,7 +362,7 @@ jobs:
       # runs too. The reporter writes the file in the working directory; we
       # search for it rather than hardcode in case a future config change
       # moves the cwd.
-      - name: Append TestRail run URL to step summary
+      - name: Append TestRail URL to Summary
         if: always()
         run: |
           set -euo pipefail
@@ -360,7 +374,7 @@ jobs:
             echo "_TestRail run URL not produced (reporter degraded or env vars missing)._" >> "$GITHUB_STEP_SUMMARY"
           fi
 
-      - name: Upload Playwright HTML report
+      - name: Upload Playwright Report
         if: always()
         uses: actions/upload-artifact@v4
         with:
