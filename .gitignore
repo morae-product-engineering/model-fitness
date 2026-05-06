@@ -27,3 +27,19 @@ htmlcov/
 # Generated docs exports (tracked folder, gitignored content)
 docs/exports/*
 !docs/exports/.gitkeep
+
+# macOS
+.DS_Store
+**/.DS_Store
+# Structurizr Lite local cache
+docs/architecture/.structurizr/
+docs/architecture/workspace.json
+# Defence-in-depth secret patterns
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+# VSCode personal overrides
+.vscode/settings.local.json
