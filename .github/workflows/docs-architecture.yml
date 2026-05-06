@@ -21,9 +21,11 @@ on:
     branches: [main]
     paths:
       - 'docs/architecture/workspace.dsl'
+      - '.github/workflows/docs-architecture.yml'
   pull_request:
     paths:
       - 'docs/architecture/workspace.dsl'
+      - '.github/workflows/docs-architecture.yml'
   workflow_dispatch:
 
 # Default permissions are read-only; jobs opt into more as needed.
@@ -93,23 +95,63 @@ jobs:
             exit 1
           fi
 
-      - name: Render PNG
+      # Structurizr CLI's `export` doesn't accept `-format png` or `-format svg`
+      # as valid format names — those silently log "unknown export format" and
+      # the CLI still exits 0 (see PR #16 first run). Valid `-format` values are
+      # exporter names (plantuml, c4plantuml, mermaid, dot, etc.). The render
+      # chain therefore goes via C4-PlantUML: Structurizr CLI emits .puml files,
+      # then PlantUML renders each .puml to SVG and PNG. The verification step
+      # below fails the job if either output dir ends up empty — that's the
+      # fitness function for this pipeline.
+      - name: Install PlantUML
         run: |
           set -euo pipefail
-          mkdir -p docs/architecture/exports/png
-          structurizr.sh export \
-            -workspace docs/architecture/workspace.dsl \
-            -format png \
-            -output docs/architecture/exports/png/
+          sudo apt-get update -qq
+          sudo apt-get install -y plantuml
 
-      - name: Render SVG
+      - name: Export to C4-PlantUML
         run: |
           set -euo pipefail
-          mkdir -p docs/architecture/exports/svg
+          mkdir -p /tmp/puml
           structurizr.sh export \
             -workspace docs/architecture/workspace.dsl \
-            -format svg \
-            -output docs/architecture/exports/svg/
+            -format c4plantuml \
+            -output /tmp/puml/
+          ls -la /tmp/puml/
+
+      - name: Render SVG via PlantUML
+        run: |
+          set -euo pipefail
+          mkdir -p "$GITHUB_WORKSPACE/docs/architecture/exports/svg"
+          for f in /tmp/puml/*.puml; do
+            plantuml -tsvg -o "$GITHUB_WORKSPACE/docs/architecture/exports/svg/" "$f"
+          done
+          ls -la "$GITHUB_WORKSPACE/docs/architecture/exports/svg/"
+
+      - name: Render PNG via PlantUML
+        run: |
+          set -euo pipefail
+          mkdir -p "$GITHUB_WORKSPACE/docs/architecture/exports/png"
+          for f in /tmp/puml/*.puml; do
+            plantuml -tpng -o "$GITHUB_WORKSPACE/docs/architecture/exports/png/" "$f"
+          done
+          ls -la "$GITHUB_WORKSPACE/docs/architecture/exports/png/"
+
+      # Fitness function: would have caught today's silent failure on PR #16.
+      # If either renderer produces zero files, fail loudly with a message that
+      # points the next maintainer at the likely cause rather than letting the
+      # job go green with empty output dirs.
+      - name: Verify renders produced files
+        run: |
+          set -euo pipefail
+          svg_count=$(find docs/architecture/exports/svg -maxdepth 1 -name '*.svg' -type f | wc -l)
+          png_count=$(find docs/architecture/exports/png -maxdepth 1 -name '*.png' -type f | wc -l)
+          echo "SVG files: ${svg_count}"
+          echo "PNG files: ${png_count}"
+          if [ "${svg_count}" -eq 0 ] || [ "${png_count}" -eq 0 ]; then
+            echo "::error::Render produced no files (svg=${svg_count}, png=${png_count}). Check the Export to C4-PlantUML / PlantUML render steps above." >&2
+            exit 1
+          fi
 
       # Generate a static index.html that lists every rendered view. Each view
       # is shown via <object data="..."> referencing the SVG — this renders
@@ -121,12 +163,30 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           import html
-          import os
+          import re
           from pathlib import Path
 
           svg_dir = Path("docs/architecture/exports/svg")
           png_dir = Path("docs/architecture/exports/png")
           out = Path("docs/architecture/exports/index.html")
+
+          # Files come from PlantUML rendering of Structurizr CLI's c4plantuml
+          # exporter. Filenames are the source .puml stem — historically
+          # `structurizr-<ViewKey>.puml` (older CLI) or
+          # `structurizr-<WorkspaceName>-<ViewKey>.puml` (newer CLI). We don't
+          # hardcode the prefix; we strip a leading "structurizr-" if present
+          # and then humanize CamelCase view keys for display.
+          def humanize(stem: str) -> str:
+              s = stem
+              if s.startswith("structurizr-"):
+                  s = s[len("structurizr-"):]
+              # If a workspace-name segment is present, drop it. The view key
+              # is the trailing segment after the last '-'.
+              if "-" in s:
+                  s = s.rsplit("-", 1)[-1]
+              # CamelCase -> "Camel Case"; leave already-spaced names alone.
+              s = re.sub(r"(?<!^)(?=[A-Z])", " ", s)
+              return s.strip() or stem
 
           svg_files = sorted(p.name for p in svg_dir.glob("*.svg"))
 
@@ -150,10 +210,11 @@ jobs:
               stem = svg[:-4]
               png = f"{stem}.png"
               has_png = (png_dir / png).exists()
-              parts.append(f"<h2>{html.escape(stem)}</h2>")
+              title = humanize(stem)
+              parts.append(f"<h2>{html.escape(title)}</h2>")
               parts.append(
                   f'<object data="svg/{html.escape(svg)}" type="image/svg+xml">'
-                  f'<img src="png/{html.escape(png)}" alt="{html.escape(stem)}"></object>'
+                  f'<img src="png/{html.escape(png)}" alt="{html.escape(title)}"></object>'
               )
               links = [f'<a href="svg/{html.escape(svg)}">SVG</a>']
               if has_png:
