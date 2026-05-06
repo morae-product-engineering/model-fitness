@@ -1,0 +1,115 @@
+# Architecture diagrams as code — Phase 2 (Confluence sync).
+#
+# When Phase 1 (docs-architecture.yml) commits fresh SVG renders to main, this
+# workflow pushes them to the MFP Architecture Confluence page as page
+# attachments. The page body is edited ONCE on first run to add the embed
+# structure (sentinel-marked); subsequent runs only refresh the attachment
+# data, leaving any human prose on the page intact.
+#
+# Triggers:
+#   - push to main with SVG export changes — the natural path.
+#   - repository_dispatch (confluence-sync-needed) — fired explicitly by the
+#     docs-architecture workflow after its [skip ci] auto-commit. Without this
+#     bridge, [skip ci] would suppress the path-filtered push trigger above.
+#   - workflow_dispatch — manual re-sync, e.g. after rotating a token.
+#
+# REST is preferred over the Atlassian MCP server here: MCP exists for
+# interactive agent flows; CI does not need an agent layer over a documented
+# REST API.
+
+name: Sync Architecture to Confluence
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/architecture/exports/svg/*.svg'
+  repository_dispatch:
+    types: [confluence-sync-needed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sync-to-confluence:
+    name: Sync to Confluence
+    runs-on: ubuntu-latest
+    steps:
+      # Fail fast on missing config — defence in depth alongside the script's
+      # own check. Lesson from MLI-162's empty-env-var typo bug: surface the
+      # missing-name early, before any network calls.
+      - name: Verify required secrets and variables
+        env:
+          CONFLUENCE_API_TOKEN: ${{ secrets.CONFLUENCE_API_TOKEN }}
+          CONFLUENCE_USER_EMAIL: ${{ vars.CONFLUENCE_USER_EMAIL }}
+          CONFLUENCE_BASE_URL: ${{ vars.CONFLUENCE_BASE_URL }}
+          CONFLUENCE_PAGE_ID: ${{ vars.CONFLUENCE_PAGE_ID }}
+        run: |
+          set -euo pipefail
+          missing=()
+          [ -n "${CONFLUENCE_API_TOKEN:-}" ] || missing+=("CONFLUENCE_API_TOKEN (secret)")
+          [ -n "${CONFLUENCE_USER_EMAIL:-}" ] || missing+=("CONFLUENCE_USER_EMAIL (variable)")
+          [ -n "${CONFLUENCE_BASE_URL:-}" ] || missing+=("CONFLUENCE_BASE_URL (variable)")
+          [ -n "${CONFLUENCE_PAGE_ID:-}" ] || missing+=("CONFLUENCE_PAGE_ID (variable)")
+          if [ ${#missing[@]} -gt 0 ]; then
+            {
+              echo "### Confluence sync skipped — missing config"
+              echo ""
+              echo "The following secrets/variables must be configured on the repo:"
+              for item in "${missing[@]}"; do
+                echo "- ${item}"
+              done
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::error::Missing required Confluence config: ${missing[*]}" >&2
+            exit 1
+          fi
+
+      # When fired by repository_dispatch the dispatching workflow passes
+      # client_payload.commit_sha — the SHA that landed the new exports. Pin
+      # the checkout to that SHA so we publish exactly what was rendered, not
+      # whatever happens to be at the head of main now.
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.client_payload.commit_sha || github.sha }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          pip install requests==2.32.3
+
+      # Sanity-check that the SVGs we expect to publish actually exist at this
+      # commit. Phase 1's render step already fails the upstream job if it
+      # produces zero files, but a tag/branch ref to an older commit could
+      # legitimately lack them — better a clear message than a Confluence 404.
+      - name: Verify SVG files present
+        run: |
+          set -euo pipefail
+          required=(
+            docs/architecture/exports/svg/structurizr-SystemContext.svg
+            docs/architecture/exports/svg/structurizr-Containers.svg
+            docs/architecture/exports/svg/structurizr-MatrixRun.svg
+          )
+          missing=()
+          for f in "${required[@]}"; do
+            [ -f "$f" ] || missing+=("$f")
+          done
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::Missing expected SVG exports: ${missing[*]}" >&2
+            exit 1
+          fi
+
+      - name: Sync diagrams to Confluence
+        env:
+          CONFLUENCE_API_TOKEN: ${{ secrets.CONFLUENCE_API_TOKEN }}
+          CONFLUENCE_USER_EMAIL: ${{ vars.CONFLUENCE_USER_EMAIL }}
+          CONFLUENCE_BASE_URL: ${{ vars.CONFLUENCE_BASE_URL }}
+          CONFLUENCE_PAGE_ID: ${{ vars.CONFLUENCE_PAGE_ID }}
+        run: python scripts/confluence-sync.py

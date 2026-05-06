@@ -288,11 +288,31 @@ jobs:
       # Pinned to commit SHA (v5 -> b863ae1933cb653a53c021fe36dbb774e1fb9403)
       # per the repo's hard rule on third-party action pinning.
       - name: Auto-commit rendered exports
+        id: auto-commit
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: stefanzweifel/git-auto-commit-action@b863ae1933cb653a53c021fe36dbb774e1fb9403
         with:
           commit_message: 'docs(architecture): re-render exports [skip ci]'
           file_pattern: 'docs/architecture/exports/**'
+
+      # Phase 2 bridge: when a re-render actually committed new exports, fire
+      # a repository_dispatch so confluence-sync.yml runs. The auto-commit's
+      # [skip ci] suffix correctly suppresses workflow re-runs on its own
+      # push, but Confluence sync still needs to see the new SVGs — hence the
+      # explicit dispatch. `changes_detected` is the action's documented
+      # output and is 'true' only when there was a diff under file_pattern,
+      # so this is a no-op when the render produced identical output.
+      - name: Trigger Confluence sync
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.auto-commit.outputs.changes_detected == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.repos.createDispatchEvent({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              event_type: 'confluence-sync-needed',
+              client_payload: { commit_sha: context.sha }
+            });
 
   # ---------------------------------------------------------------------------
   # Job 2: deploy the rendered exports to GitHub Pages. Only on push to main.
