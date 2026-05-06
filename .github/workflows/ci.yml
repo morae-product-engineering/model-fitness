@@ -27,7 +27,7 @@
 #                                     (runtime-read, not build-time-inlined).
 #                                     See deploy-dev step comments.
 
-name: CI
+name: Build, Test, and Deploy
 
 on:
   pull_request:
