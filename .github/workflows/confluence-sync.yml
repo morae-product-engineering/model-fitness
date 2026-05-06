@@ -3,8 +3,8 @@
 # When Phase 1 (docs-architecture.yml) commits fresh SVG renders to main, this
 # workflow pushes them to the MFP Architecture Confluence page as page
 # attachments. The page body is edited ONCE on first run to add the embed
-# structure (sentinel-marked); subsequent runs only refresh the attachment
-# data, leaving any human prose on the page intact.
+# structure (marked by a Confluence content property); subsequent runs only
+# refresh the attachment data, leaving any human prose on the page intact.
 #
 # Triggers:
 #   - push to main with SVG export changes — the natural path.
