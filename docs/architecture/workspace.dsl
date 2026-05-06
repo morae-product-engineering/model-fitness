@@ -51,7 +51,6 @@ workspace "Morae Model Fitness Platform" "MMFP scores LLM candidates against a v
         ci -> testrail "Posts e2e test results after each deployment" "HTTPS"
 
         # System-level: used in dynamic view.
-        mmfp -> foundry "Invokes candidate LLMs during matrix runs" "HTTPS"
         mmfp -> testrail "Posts e2e evidence after each run (via CI)" "HTTPS"
 
     }
