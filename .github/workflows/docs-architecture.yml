@@ -103,11 +103,34 @@ jobs:
       # then PlantUML renders each .puml to SVG and PNG. The verification step
       # below fails the job if either output dir ends up empty — that's the
       # fitness function for this pipeline.
-      - name: Install PlantUML
+      # PlantUML's C4 diagrams render through Graphviz; install it from apt.
+      - name: Install Graphviz
         run: |
           set -euo pipefail
           sudo apt-get update -qq
-          sudo apt-get install -y plantuml
+          sudo apt-get install -y graphviz
+
+      # Use the upstream PlantUML jar rather than apt's plantuml. The Ubuntu
+      # package lags well behind upstream and on 24.04 failed to parse the
+      # C4-PlantUML stdlib includes Structurizr CLI emits. Pin to a recent
+      # stable release; bump deliberately.
+      - name: Install PlantUML
+        run: |
+          set -euo pipefail
+          PLANTUML_VERSION="1.2024.7"
+          PLANTUML_JAR="${RUNNER_TOOL_CACHE}/plantuml/plantuml.jar"
+          mkdir -p "$(dirname "${PLANTUML_JAR}")"
+          curl -sSL -o "${PLANTUML_JAR}" \
+            "https://github.com/plantuml/plantuml/releases/download/v${PLANTUML_VERSION}/plantuml-${PLANTUML_VERSION}.jar"
+          # Wrapper so subsequent steps can call `plantuml` like the apt binary.
+          cat > "${RUNNER_TOOL_CACHE}/plantuml/plantuml" <<EOF
+          #!/usr/bin/env bash
+          exec java -Djava.awt.headless=true -jar "${PLANTUML_JAR}" "\$@"
+          EOF
+          chmod +x "${RUNNER_TOOL_CACHE}/plantuml/plantuml"
+          echo "${RUNNER_TOOL_CACHE}/plantuml" >> "$GITHUB_PATH"
+          # Sanity-check the install.
+          java -jar "${PLANTUML_JAR}" -version
 
       # Format must be `plantuml/c4plantuml` — confirmed against
       # structurizr/cli's ExportCommand.java. Bare `c4plantuml` is not
@@ -129,6 +152,13 @@ jobs:
             echo "::error::structurizr export produced no .puml files. Check the format name (must be plantuml/c4plantuml)." >&2
             exit 1
           fi
+          # Echo one .puml's head so any future render-time failure has the
+          # generated input visible in the same log without needing artifacts.
+          for f in /tmp/puml/*.puml; do
+            echo "--- head of $f ---"
+            head -25 "$f"
+            break
+          done
 
       - name: Render SVG via PlantUML
         run: |
