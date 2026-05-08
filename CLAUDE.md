@@ -115,6 +115,10 @@ All tests deterministic — no wall-clock dependence, no unfixed random seeds, n
 
 `ADRs/` directory, MADR format, one page max, filename `NNNN-short-decision-title.md`. If a sub-task's acceptance includes an ADR, draft it first, get it reviewed, then implement. Don't reuse numbers from superseded ADRs — supersede the old, take the next free number.
 
+## Dev-environment access
+
+The dev UI (Container App `ca-mmfp-ui-dev`) sits behind HTTP Basic Auth as an interim access gate. Credentials live in 1Password under `MMFP / dev UI basic auth`; the running container reads them from the `BASIC_AUTH_USER` / `BASIC_AUTH_PASS` env vars wired to Key Vault secrets `basic-auth-user` and `basic-auth-pass`. The middleware lives in [ui/middleware.ts](ui/middleware.ts) and is intentionally fail-closed and easily removable — it is temporary, pending the Entra SSO migration tracked in [TODO: link]. Removal steps are listed in the `AUTH-REMOVAL` block at the top of that file.
+
 ## References
 
 - Product hypothesis — https://morae.atlassian.net/wiki/spaces/MLI/pages/213549111/Model+Fitness+Platform
