@@ -1,0 +1,551 @@
+"""MatrixEngine — orchestrates (rubric × datasets × candidates) → MatrixRun.
+
+For each (candidate × dataset_example × dimension) cell, the engine:
+  1. Invokes the candidate's binding once per (candidate × example) — one
+     model response is scored along every dimension defined by the example's
+     tier.
+  2. Routes the binding response's `content` or `reasoning_content` to each
+     evaluator per `EvaluatorPlugin.scores_field` (MLI-165 §2; MLI-170).
+  3. Records a `MatrixRunResult`.
+
+Concurrency
+-----------
+Per-candidate `ThreadPoolExecutor` (default `max_workers=4`). Within a
+candidate, examples and dimensions run sequentially: provider rate limits
+are per-deployment, so cross-candidate parallelism is the right axis.
+Threads (not asyncio) because the binding ABC is sync at v1.
+
+Failure isolation
+-----------------
+Per MLI-171: a single (candidate × example) failure produces an errored
+`MatrixRunResult` for every dimension that example covers; the run
+continues. No full-matrix abort.
+
+Retry policy (in `_retry.py`)
+-----------------------------
+Exponential backoff on 429 / 5xx (default 1s → 2s → 4s, max 3 attempts).
+Other 4xx are non-retriable. After exhaustion: cell marked errored.
+
+Dimension → evaluator dispatch
+------------------------------
+Engine takes an explicit `dimension_evaluators: Mapping[str, str]` at
+`run()` time. The Rubric model deliberately doesn't carry this binding yet
+— subtask 2.8 (rubric YAML loader) will likely add it to `Dimension`, but
+this PR keeps the model untouched. Validated up-front: missing or unknown
+evaluator names raise before any model is called.
+
+LangSmith tracing
+-----------------
+Every binding invoke and every evaluator scoring is a traceable span,
+tagged with `run_id`, `rubric_version`, `tier_id`, `candidate_id`,
+`candidate_deployment`. The langsmith SDK auto no-ops when
+`LANGSMITH_API_KEY` is unset, so unit tests don't need to mock tracing.
+
+Persistence
+-----------
+Returns an in-memory `MatrixRun`. SQLite persistence (mentioned in
+MLI-172's scope) is deferred — no DB layer / migrations / repository
+exist yet, and the acceptance criteria assert in-memory shape. Flagged in
+the closing comment as a follow-up subtask.
+"""
+
+from __future__ import annotations
+
+import json
+import time
+import uuid
+from collections import defaultdict
+from collections.abc import Callable, Mapping, Sequence
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import suppress
+from datetime import datetime, timezone
+from decimal import Decimal
+from typing import Any
+
+from langsmith import traceable
+
+from mmfp.bindings import _registry as binding_registry
+from mmfp.engine._retry import invoke_with_retry
+from mmfp.evaluators import _registry as evaluator_registry
+from mmfp.models.binding_response import BindingResponse
+from mmfp.models.candidate import Candidate
+from mmfp.models.dataset import Dataset, DatasetExample
+from mmfp.models.matrix_run import (
+    EvaluatorScore,
+    MatrixRun,
+    MatrixRunResult,
+    SourceField,
+)
+from mmfp.models.rubric import Dimension, Rubric, Tier
+from mmfp.plugins.binding import BindingPlugin
+from mmfp.plugins.evaluator import EvaluatorPlugin
+
+
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _new_run_id() -> str:
+    return uuid.uuid4().hex
+
+
+def _to_prompt(example_input: dict[str, Any] | str) -> str:
+    """Coerce a `DatasetExample.input` into the v1 binding's single-prompt shape.
+
+    The binding signature accepts only `prompt: str` for v1 (multi-turn /
+    system support broadens later, non-breakingly — see binding ABC).
+    Strings are passed through; dicts are JSON-serialised so the engine
+    runs end-to-end against any reasonable dataset shape and we evolve
+    when tier_2 / multi-turn data lands.
+    """
+    if isinstance(example_input, str):
+        return example_input
+    return json.dumps(example_input, sort_keys=True, ensure_ascii=False)
+
+
+class MatrixEngine:
+    """Drives a matrix run and emits a `MatrixRun`.
+
+    All I/O-touching collaborators (binding factory, evaluator factory,
+    sleep, clock, run id factory) are constructor-injected so tests can
+    swap them. Defaults pull bindings/evaluators from the registries
+    populated by `mmfp.bindings` / `mmfp.evaluators`.
+    """
+
+    def __init__(
+        self,
+        *,
+        max_workers: int = 4,
+        retry_attempts: int = 3,
+        retry_base_delay_s: float = 1.0,
+        sleep: Callable[[float], None] = time.sleep,
+        clock: Callable[[], datetime] = _utc_now,
+        run_id_factory: Callable[[], str] = _new_run_id,
+        binding_factory: Callable[[str], BindingPlugin] | None = None,
+        evaluator_factory: Callable[[str], EvaluatorPlugin] | None = None,
+    ) -> None:
+        self._max_workers = max_workers
+        self._retry_attempts = retry_attempts
+        self._retry_base_delay_s = retry_base_delay_s
+        self._sleep = sleep
+        self._clock = clock
+        self._run_id_factory = run_id_factory
+        self._binding_factory = binding_factory or _default_binding_factory
+        self._evaluator_factory = evaluator_factory or _default_evaluator_factory
+
+    def run(
+        self,
+        rubric: Rubric,
+        datasets: Sequence[Dataset],
+        candidates: Sequence[Candidate],
+        *,
+        dimension_evaluators: Mapping[str, str],
+    ) -> MatrixRun:
+        """Execute the matrix and return a populated `MatrixRun`.
+
+        Validates dimension → evaluator coverage and resolves all evaluators
+        before any model is called, so misconfiguration fails fast rather
+        than burning a candidate's quota.
+        """
+        self._validate_coverage(rubric, dimension_evaluators)
+
+        run_id = self._run_id_factory()
+        started_at = self._clock()
+
+        # Cache binding instances per provider — sharing the httpx.Client
+        # across candidates is cheaper, and keeps connection pooling effective.
+        binding_cache: dict[str, BindingPlugin] = {}
+        evaluator_cache: dict[str, EvaluatorPlugin] = {}
+
+        def get_binding(provider: str) -> BindingPlugin:
+            if provider not in binding_cache:
+                binding_cache[provider] = self._binding_factory(provider)
+            return binding_cache[provider]
+
+        def get_evaluator(name: str) -> EvaluatorPlugin:
+            if name not in evaluator_cache:
+                evaluator_cache[name] = self._evaluator_factory(name)
+            return evaluator_cache[name]
+
+        # Pre-resolve every evaluator referenced by the rubric. If any
+        # name is bogus, fail before invoking any model.
+        for tier in rubric.tiers:
+            for dimension in tier.dimensions:
+                get_evaluator(dimension_evaluators[dimension.id])
+
+        datasets_by_tier: dict[str, list[Dataset]] = defaultdict(list)
+        for dataset in datasets:
+            datasets_by_tier[dataset.tier_id].append(dataset)
+
+        try:
+            results = self._traced_run(
+                rubric=rubric,
+                candidates=candidates,
+                datasets_by_tier=datasets_by_tier,
+                dimension_evaluators=dimension_evaluators,
+                get_binding=get_binding,
+                get_evaluator=get_evaluator,
+                run_id=run_id,
+                langsmith_extra={
+                    "metadata": {
+                        "run_id": run_id,
+                        "rubric_version": rubric.version,
+                    },
+                    "tags": [f"rubric:{rubric.version}", f"run:{run_id}"],
+                },
+            )
+        finally:
+            for binding in binding_cache.values():
+                close = getattr(binding, "close", None)
+                if callable(close):
+                    with suppress(Exception):
+                        close()
+
+        completed_at = self._clock()
+        return MatrixRun(
+            id=run_id,
+            rubric_version=rubric.version,
+            started_at=started_at,
+            completed_at=completed_at,
+            results=results,
+        )
+
+    @staticmethod
+    def _validate_coverage(
+        rubric: Rubric, dimension_evaluators: Mapping[str, str]
+    ) -> None:
+        missing = [
+            d.id
+            for tier in rubric.tiers
+            for d in tier.dimensions
+            if d.id not in dimension_evaluators
+        ]
+        if missing:
+            raise ValueError(
+                f"dimension_evaluators missing entries for: {sorted(missing)}. "
+                f"Every rubric dimension must declare an evaluator."
+            )
+
+    @traceable(name="MatrixEngine.run", run_type="chain")
+    def _traced_run(
+        self,
+        *,
+        rubric: Rubric,
+        candidates: Sequence[Candidate],
+        datasets_by_tier: Mapping[str, list[Dataset]],
+        dimension_evaluators: Mapping[str, str],
+        get_binding: Callable[[str], BindingPlugin],
+        get_evaluator: Callable[[str], EvaluatorPlugin],
+        run_id: str,
+    ) -> list[MatrixRunResult]:
+        def _run_one(candidate: Candidate) -> list[MatrixRunResult]:
+            return self._run_candidate(
+                candidate=candidate,
+                rubric=rubric,
+                datasets_by_tier=datasets_by_tier,
+                dimension_evaluators=dimension_evaluators,
+                get_binding=get_binding,
+                get_evaluator=get_evaluator,
+                run_id=run_id,
+            )
+
+        # ThreadPoolExecutor.map preserves submission order, which keeps
+        # the results list deterministic — useful for snapshot tests and
+        # for humans reading run output.
+        with ThreadPoolExecutor(max_workers=self._max_workers) as pool:
+            per_candidate = list(pool.map(_run_one, candidates))
+
+        flat: list[MatrixRunResult] = []
+        for chunk in per_candidate:
+            flat.extend(chunk)
+        return flat
+
+    def _run_candidate(
+        self,
+        *,
+        candidate: Candidate,
+        rubric: Rubric,
+        datasets_by_tier: Mapping[str, list[Dataset]],
+        dimension_evaluators: Mapping[str, str],
+        get_binding: Callable[[str], BindingPlugin],
+        get_evaluator: Callable[[str], EvaluatorPlugin],
+        run_id: str,
+    ) -> list[MatrixRunResult]:
+        binding = get_binding(candidate.binding.provider)
+        out: list[MatrixRunResult] = []
+        for tier in rubric.tiers:
+            for dataset in datasets_by_tier.get(tier.id, ()):
+                for example in dataset.examples:
+                    out.extend(
+                        self._run_cell(
+                            tier=tier,
+                            dataset=dataset,
+                            example=example,
+                            candidate=candidate,
+                            binding=binding,
+                            dimension_evaluators=dimension_evaluators,
+                            get_evaluator=get_evaluator,
+                            run_id=run_id,
+                            rubric_version=rubric.version,
+                        )
+                    )
+        return out
+
+    def _run_cell(
+        self,
+        *,
+        tier: Tier,
+        dataset: Dataset,
+        example: DatasetExample,
+        candidate: Candidate,
+        binding: BindingPlugin,
+        dimension_evaluators: Mapping[str, str],
+        get_evaluator: Callable[[str], EvaluatorPlugin],
+        run_id: str,
+        rubric_version: str,
+    ) -> list[MatrixRunResult]:
+        prompt = _to_prompt(example.input)
+        response, binding_error = self._invoke_traced(
+            binding=binding,
+            candidate=candidate,
+            prompt=prompt,
+            tier_id=tier.id,
+            run_id=run_id,
+            rubric_version=rubric_version,
+            example_id=example.id,
+        )
+
+        results: list[MatrixRunResult] = []
+        for dimension in tier.dimensions:
+            evaluator = get_evaluator(dimension_evaluators[dimension.id])
+            results.append(
+                self._score_dimension(
+                    tier=tier,
+                    dimension=dimension,
+                    evaluator=evaluator,
+                    candidate=candidate,
+                    dataset=dataset,
+                    example=example,
+                    response=response,
+                    binding_error=binding_error,
+                    run_id=run_id,
+                    rubric_version=rubric_version,
+                )
+            )
+        return results
+
+    def _invoke_traced(
+        self,
+        *,
+        binding: BindingPlugin,
+        candidate: Candidate,
+        prompt: str,
+        tier_id: str,
+        run_id: str,
+        rubric_version: str,
+        example_id: str,
+    ) -> tuple[BindingResponse | None, str | None]:
+        @traceable(name="binding.invoke", run_type="llm")
+        def _invoke() -> BindingResponse:
+            return invoke_with_retry(
+                binding,
+                candidate,
+                prompt,
+                candidate.max_tokens,
+                max_attempts=self._retry_attempts,
+                base_delay_s=self._retry_base_delay_s,
+                sleep=self._sleep,
+            )
+
+        try:
+            response = _invoke(
+                langsmith_extra={
+                    "metadata": {
+                        "run_id": run_id,
+                        "rubric_version": rubric_version,
+                        "tier_id": tier_id,
+                        "candidate_id": candidate.id,
+                        "candidate_deployment": candidate.binding.deployment,
+                        "example_id": example_id,
+                    },
+                    "tags": [
+                        f"run:{run_id}",
+                        f"tier:{tier_id}",
+                        f"candidate:{candidate.id}",
+                    ],
+                }
+            )
+            return response, None
+        except Exception as e:
+            # The retry helper has already exhausted backoff. Surface a
+            # short reason; LangSmith holds the full trace.
+            return None, f"{type(e).__name__}: {e}"
+
+    def _score_dimension(
+        self,
+        *,
+        tier: Tier,
+        dimension: Dimension,
+        evaluator: EvaluatorPlugin,
+        candidate: Candidate,
+        dataset: Dataset,
+        example: DatasetExample,
+        response: BindingResponse | None,
+        binding_error: str | None,
+        run_id: str,
+        rubric_version: str,
+    ) -> MatrixRunResult:
+        if response is None:
+            # Binding failure cascades: every dimension this example
+            # would have scored becomes an errored cell.
+            score = self._errored_score(
+                dimension=dimension,
+                evaluator_id=evaluator.name,
+                source_field=evaluator.scores_field,
+                error=f"binding error: {binding_error}",
+            )
+            return MatrixRunResult(
+                tier_id=tier.id,
+                candidate_id=candidate.id,
+                dataset_id=dataset.id,
+                example_id=example.id,
+                score=score,
+            )
+
+        candidate_output = self._extract_field(response, evaluator.scores_field)
+        if candidate_output is None:
+            # Reasoning-content evaluator on a chat-only model. MLI-165 §2
+            # — surfaces as an errored cell so it's visible at score time.
+            score = self._errored_score(
+                dimension=dimension,
+                evaluator_id=evaluator.name,
+                source_field=evaluator.scores_field,
+                error=(
+                    f"evaluator '{evaluator.name}' scores "
+                    f"{evaluator.scores_field.value} but response had none "
+                    f"(candidate family={candidate.family.value})"
+                ),
+            )
+        else:
+            score = self._evaluate_traced(
+                evaluator=evaluator,
+                candidate_output=candidate_output,
+                expected=self._coerce_expected(example.expected),
+                dimension=dimension,
+                run_id=run_id,
+                rubric_version=rubric_version,
+                tier_id=tier.id,
+                candidate=candidate,
+                example_id=example.id,
+            )
+
+        return MatrixRunResult(
+            tier_id=tier.id,
+            candidate_id=candidate.id,
+            dataset_id=dataset.id,
+            example_id=example.id,
+            score=score,
+            completion_tokens=response.usage.completion_tokens,
+            prompt_tokens=response.usage.prompt_tokens,
+            finish_reason=response.finish_reason,
+        )
+
+    @staticmethod
+    def _extract_field(
+        response: BindingResponse, source_field: SourceField
+    ) -> str | None:
+        if source_field is SourceField.CONTENT:
+            return response.content
+        if response.reasoning_content is None:
+            return None
+        return response.reasoning_content
+
+    @staticmethod
+    def _coerce_expected(expected: Any) -> dict[str, Any]:
+        # The deterministic-trio evaluators expect a dict shape
+        # (`expected["value"]`, `expected["pattern"]`, `expected["schema"]`).
+        # `DatasetExample.expected` is `Any` — non-dict values would only
+        # appear from a malformed dataset, but coercing to a dict keeps the
+        # error a clean ValueError from the evaluator rather than a
+        # TypeError out of attribute access.
+        if isinstance(expected, dict):
+            return expected
+        return {"value": expected}
+
+    def _evaluate_traced(
+        self,
+        *,
+        evaluator: EvaluatorPlugin,
+        candidate_output: str,
+        expected: dict[str, Any],
+        dimension: Dimension,
+        run_id: str,
+        rubric_version: str,
+        tier_id: str,
+        candidate: Candidate,
+        example_id: str,
+    ) -> EvaluatorScore:
+        @traceable(name="evaluator.evaluate", run_type="tool")
+        def _do_eval() -> EvaluatorScore:
+            return evaluator.evaluate(
+                candidate_output,
+                expected,
+                {"dimension_id": dimension.id, "evaluator_id": evaluator.name},
+            )
+
+        try:
+            return _do_eval(
+                langsmith_extra={
+                    "metadata": {
+                        "run_id": run_id,
+                        "rubric_version": rubric_version,
+                        "tier_id": tier_id,
+                        "dimension_id": dimension.id,
+                        "candidate_id": candidate.id,
+                        "candidate_deployment": candidate.binding.deployment,
+                        "example_id": example_id,
+                        "evaluator": evaluator.name,
+                    },
+                    "tags": [
+                        f"run:{run_id}",
+                        f"tier:{tier_id}",
+                        f"dimension:{dimension.id}",
+                    ],
+                }
+            )
+        except Exception as e:
+            return self._errored_score(
+                dimension=dimension,
+                evaluator_id=evaluator.name,
+                source_field=evaluator.scores_field,
+                error=f"{type(e).__name__}: {e}",
+            )
+
+    @staticmethod
+    def _errored_score(
+        *,
+        dimension: Dimension,
+        evaluator_id: str,
+        source_field: SourceField,
+        error: str,
+    ) -> EvaluatorScore:
+        return EvaluatorScore(
+            dimension_id=dimension.id,
+            evaluator_id=evaluator_id,
+            raw_value=None,
+            normalized_score=Decimal("0"),
+            passed=None,
+            source_field=source_field,
+            error=error,
+        )
+
+
+def _default_binding_factory(provider: str) -> BindingPlugin:
+    return binding_registry.get(provider)()
+
+
+def _default_evaluator_factory(name: str) -> EvaluatorPlugin:
+    return evaluator_registry.get(name)()
+
+
+__all__ = ["MatrixEngine"]

@@ -8,6 +8,10 @@ dependencies = [
     "pydantic>=2.7",
     "jsonschema>=4.21",
     "httpx>=0.27",
+    # MLI-172: matrix engine emits LangSmith spans per binding invoke and
+    # per evaluator scoring. SDK auto no-ops when LANGSMITH_API_KEY is unset
+    # so unit tests don't have to mock it. EU endpoint convention from MLI-167.
+    "langsmith>=0.2",
 ]
 
 [project.optional-dependencies]
