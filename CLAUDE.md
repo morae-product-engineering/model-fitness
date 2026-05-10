@@ -109,6 +109,8 @@ If you're running as the wrong tier — the prompt is more ambiguous than the re
 - Integration — `mmfp/tests/`. Real-but-local dependencies (real SQLite, mocked HTTP).
 - E2E — `tests/e2e/`. Playwright against the deployed dev environment. One per slice as the slice acceptance test.
 
+**Slice acceptance tests:** Tests that gate a slice's completion (deliberately red until the slice's implementation lands) are marked with `@pytest.mark.slice_acceptance` (or module-level `pytestmark = pytest.mark.slice_acceptance`). The standard `Unit Tests (pytest)` CI job excludes them; a separate `Slice Acceptance Tests (pytest)` job runs them with `continue-on-error: true` so deliberate-red doesn't block downstream CI. When the slice's implementation lands and the test goes green, the marker stays on the file — its purpose is identification, not a temporary skip.
+
 All tests deterministic — no wall-clock dependence, no unfixed random seeds, no order-dependence. The TestRail reporter (`tests/reporters/testrail-reporter.ts`) auto-creates cases from Playwright titles. Test code is the source of truth — don't manually create cases in TestRail.
 
 ## ADRs

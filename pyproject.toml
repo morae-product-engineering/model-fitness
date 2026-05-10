@@ -23,6 +23,9 @@ include = ["mmfp*"]
 
 [tool.pytest.ini_options]
 # Repo root should normally be on sys.path automatically via editable install.
+markers = [
+    "slice_acceptance: deliberately-red tests that gate slice completion; pass when the slice's implementation tasks land. Excluded from the standard unit-test CI job.",
+]
 
 [tool.ruff]
 # Slice 1 baseline — start permissive, tighten later (P1: earn complexity).

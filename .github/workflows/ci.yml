@@ -104,8 +104,36 @@ jobs:
       # Note: package was renamed platform/ -> mmfp/ — the path below is the
       # current source root. Stale references to `pytest platform/` in older
       # ticket text are wrong.
+      #
+      # Slice-acceptance tests (deliberately red until the slice's
+      # implementation lands) are excluded here and run by the
+      # `slice-acceptance-tests` job below. See CLAUDE.md "Tests" section.
       - name: Run Pytest
-        run: pytest mmfp/
+        run: pytest -m "not slice_acceptance" mmfp/
+
+  slice-acceptance-tests:
+    # Runs only the tests marked @pytest.mark.slice_acceptance. These are
+    # deliberately red until the corresponding slice's implementation lands.
+    # Belt-and-braces soft-failure: both `continue-on-error: true` and the
+    # `|| true` on the pytest invocation. Either alone is sufficient; both
+    # together prevent a future engineer from accidentally re-introducing the
+    # CI blocker by removing one. See CLAUDE.md "Tests" section.
+    name: Slice Acceptance Tests (pytest)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install Package and Dev Dependencies
+        run: pip install -e ".[dev]"
+
+      - name: Run Slice-Acceptance Tests
+        run: pytest -m slice_acceptance mmfp/ || true
 
   unit-typescript:
     name: Unit Tests (vitest)
