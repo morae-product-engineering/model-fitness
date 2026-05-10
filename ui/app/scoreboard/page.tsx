@@ -1,25 +1,30 @@
-// Server component — fetches from the MMFP API at build/request time.
+// Async server component — fetches the live scoreboard API and renders tier cards.
 // ASSUMES: NEXT_PUBLIC_API_URL is set; falls back to localhost:8000 for local dev.
-// TODO(MLI-???): replace skeleton endpoint with real /api/runs once Slice 2 is wired.
 
-interface SkeletonRun {
-  weighted_score: number;
-  source: string;
-}
+import { parseScoreboard, TIERS, WireScoreboard, TierId } from "@/lib/scoreboard";
+import TierCard from "@/components/TierCard";
+
+// The three tier IDs in the order the API always returns them.
+const TIER_ORDER: TierId[] = ["tier_1", "tier_2", "tier_3"];
 
 type FetchResult =
-  | { ok: true; data: SkeletonRun }
+  | { ok: true; data: WireScoreboard }
   | { ok: false; error: string };
 
-async function fetchSkeletonRun(): Promise<FetchResult> {
+async function fetchScoreboard(product: string): Promise<FetchResult> {
   const apiUrl =
     process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
   try {
-    // cache: 'no-store' — this is a development skeleton; no caching needed yet.
-    const res = await fetch(`${apiUrl}/api/runs/skeleton`, {
-      cache: "no-store",
-    });
+    const res = await fetch(
+      `${apiUrl}/api/products/${encodeURIComponent(product)}/scoreboard`,
+      { cache: "no-store" }
+    );
+
+    if (res.status === 404) {
+      const body = await res.json().catch(() => ({ detail: "Not found" }));
+      return { ok: false, error: body.detail ?? "Unknown product or no runs" };
+    }
 
     if (!res.ok) {
       return {
@@ -28,76 +33,80 @@ async function fetchSkeletonRun(): Promise<FetchResult> {
       };
     }
 
-    const data: SkeletonRun = await res.json();
+    const data: WireScoreboard = await res.json();
     return { ok: true, data };
   } catch (err) {
-    // Network failure (API not running, DNS resolution failure, etc.)
     const message =
       err instanceof Error ? err.message : "Unknown network error";
     return { ok: false, error: `API not reachable: ${message}` };
   }
 }
 
-export default async function ScoreboardPage() {
-  const result = await fetchSkeletonRun();
+interface PageProps {
+  searchParams: { product?: string };
+}
+
+export default async function ScoreboardPage({ searchParams }: PageProps) {
+  const product = searchParams.product ?? "mli";
+  const result = await fetchScoreboard(product);
 
   if (!result.ok) {
     return (
-      <main className="min-h-screen bg-white flex items-center justify-center p-8">
-        <div className="max-w-md w-full bg-neutral-12 border border-neutral-11 rounded-lg p-6 shadow-sm">
+      <main className="min-h-screen bg-neutral-13 flex items-center justify-center p-8">
+        <div className="max-w-md w-full bg-white border border-neutral-11 rounded-lg p-6 shadow-sm">
           <h1 className="text-lg font-semibold text-neutral-1 mb-2">
             Model Fitness Scoreboard
           </h1>
-          <p className="text-sm text-neutral-5">
-            {result.error}
-          </p>
+          <p className="text-sm text-neutral-5">{result.error}</p>
         </div>
       </main>
     );
   }
 
-  const { weighted_score, source } = result.data;
+  const scoreboard = parseScoreboard(result.data);
+
+  // Build a lookup so TierCards can get their candidates by tier_id.
+  const candidatesByTier = Object.fromEntries(
+    scoreboard.tiers.map((t) => [t.tier_id, t.candidates])
+  );
 
   return (
-    <main className="min-h-screen bg-white p-8">
-      <div className="max-w-lg mx-auto">
-        {/* Page header — mirrors prototype SectionHeader style */}
+    <main className="min-h-screen bg-neutral-13 p-8">
+      <div className="max-w-5xl mx-auto">
+        {/* Page header */}
         <div className="mb-6">
           <p className="text-xs font-semibold text-neutral-6 uppercase tracking-wide mb-1">
-            Walking Skeleton
+            Model Fitness · {product.toUpperCase()}
           </p>
-          <h1 className="text-2xl font-semibold text-neutral-1 tracking-tight">
-            Model Fitness Scoreboard
+          <h1 className="text-2xl font-semibold text-neutral-1 tracking-tight mb-1">
+            Scoreboard
           </h1>
+          <p className="text-xs text-neutral-6 font-mono">
+            Run{" "}
+            <span className="text-neutral-3">{scoreboard.run_id}</span>
+            {" · "}
+            Rubric{" "}
+            <span data-testid="rubric-version" className="text-neutral-3">
+              {scoreboard.rubric_version}
+            </span>
+            {" · "}
+            Started{" "}
+            <span className="text-neutral-3">
+              {new Date(scoreboard.started_at).toLocaleString()}
+            </span>
+          </p>
         </div>
 
-        {/* Score card — white background, subtle border, matches prototype Panel */}
-        <div className="bg-white border border-neutral-11 rounded-lg p-5 shadow-sm">
-          <div className="mb-4">
-            <p className="text-xs font-semibold text-neutral-6 uppercase tracking-wide mb-1">
-              Weighted Score
-            </p>
-            <p
-              data-testid="skeleton-score"
-              className="text-5xl font-semibold text-neutral-1 tabular-nums"
-            >
-              {weighted_score}
-            </p>
-          </div>
-
-          <hr className="border-neutral-11 mb-4" />
-
-          <div>
-            <p className="text-xs font-semibold text-neutral-6 uppercase tracking-wide mb-1">
-              Source
-            </p>
-            <p
-              data-testid="skeleton-source"
-              className="text-sm text-neutral-3 font-mono"
-            >
-              {source}
-            </p>
-          </div>
+        {/* Tier cards */}
+        <div className="flex flex-col gap-4">
+          {TIER_ORDER.map((tierId) => (
+            <TierCard
+              key={tierId}
+              tierId={tierId}
+              meta={TIERS[tierId]}
+              candidates={candidatesByTier[tierId] ?? []}
+            />
+          ))}
         </div>
       </div>
     </main>
