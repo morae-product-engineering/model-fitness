@@ -90,6 +90,19 @@
           "description": "Native evaluator output before normalisation \u2014 float for accuracy, ms for latency, USD for cost, judge score on declared scale.",
           "title": "Raw Value"
         },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Short human-readable explanation of the score (e.g. 'exact match', 'json missing key foo'). Distinct from `error`: `reason` describes a normal pass/fail outcome; `error` is set only when the evaluator itself failed to run.",
+          "title": "Reason"
+        },
         "source_field": {
           "$ref": "#/$defs/SourceField",
           "default": "content"
