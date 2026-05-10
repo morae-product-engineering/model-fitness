@@ -63,6 +63,7 @@ def _rubric() -> Rubric:
                         weight=Decimal("100"),
                         method=Method.DETERMINISTIC,
                         direction=Direction.HIGHER_IS_BETTER,
+                        evaluator="exact_match",
                     )
                 ],
             ),
@@ -87,6 +88,7 @@ def _candidate(id: str = "c1") -> Candidate:
         display_name=id,
         family=CandidateFamily.CHAT,
         max_tokens=256,
+        tiers=["tier_1"],
         binding=CandidateBinding(
             provider="azure_foundry",
             endpoint="https://example.com",

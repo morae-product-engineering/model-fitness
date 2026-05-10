@@ -50,6 +50,7 @@ def _tier_1() -> Tier:
                 description="Proportion of inputs classified correctly",
                 weight=Decimal("60"),
                 method=Method.DETERMINISTIC,
+                evaluator="exact_match",
             ),
             Dimension(
                 id="latency_p95",
@@ -58,6 +59,7 @@ def _tier_1() -> Tier:
                 weight=Decimal("40"),
                 method=Method.METRIC,
                 direction="lower_is_better",
+                evaluator="regex_match",
             ),
         ],
     )
@@ -92,6 +94,7 @@ def _candidate() -> Candidate:
         display_name="Kimi K2.6",
         family=CandidateFamily.REASONING,
         max_tokens=4096,
+        tiers=["tier_1"],
         binding=CandidateBinding(
             provider="azure_foundry",
             endpoint="https://example-models.cognitiveservices.azure.com",
@@ -182,6 +185,7 @@ def test_tier_dimension_weights_must_sum_to_100() -> None:
                     description="a",
                     weight=Decimal("70"),
                     method=Method.DETERMINISTIC,
+                    evaluator="exact_match",
                 ),
                 Dimension(
                     id="b",
@@ -189,6 +193,7 @@ def test_tier_dimension_weights_must_sum_to_100() -> None:
                     description="b",
                     weight=Decimal("20"),
                     method=Method.DETERMINISTIC,
+                    evaluator="exact_match",
                 ),
             ],
         )
@@ -208,6 +213,7 @@ def test_tier_dimension_ids_must_be_unique() -> None:
                     description="a",
                     weight=Decimal("50"),
                     method=Method.DETERMINISTIC,
+                    evaluator="exact_match",
                 ),
                 Dimension(
                     id="dup",
@@ -215,6 +221,7 @@ def test_tier_dimension_ids_must_be_unique() -> None:
                     description="b",
                     weight=Decimal("50"),
                     method=Method.DETERMINISTIC,
+                    evaluator="exact_match",
                 ),
             ],
         )
@@ -226,6 +233,7 @@ def test_candidate_max_tokens_required() -> None:
             id="c",
             display_name="c",
             family=CandidateFamily.CHAT,
+            tiers=["tier_1"],
             binding=CandidateBinding(
                 provider="azure_foundry",
                 endpoint="https://example.com",
@@ -263,6 +271,7 @@ def test_extra_fields_forbidden() -> None:
                 "display_name": "c",
                 "family": "chat",
                 "max_tokens": 100,
+                "tiers": ["tier_1"],
                 "binding": {
                     "provider": "azure_foundry",
                     "endpoint": "https://example.com",

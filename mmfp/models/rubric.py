@@ -67,6 +67,18 @@ class Dimension(BaseModel):
     weight: Weight = Field(description="Percentage weight within its tier; tier weights sum to 100")
     method: Method
     direction: Direction = Direction.HIGHER_IS_BETTER
+    # The MLI-258 engine signature still takes `dimension_evaluators` as an
+    # explicit Mapping[str, str] so `MatrixEngine.run()` doesn't change shape;
+    # the loader derives that mapping from this field. Single source of truth
+    # in the rubric YAML — see ADR-0001 §"Open question for MLI-173" /
+    # MLI-173 closing comment.
+    evaluator: str = Field(
+        min_length=1,
+        description=(
+            "Registered evaluator name (e.g. 'exact_match', 'json_schema'); "
+            "must match a key in the EvaluatorPlugin registry."
+        ),
+    )
 
 
 class Tier(BaseModel):

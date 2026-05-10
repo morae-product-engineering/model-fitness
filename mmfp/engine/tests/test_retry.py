@@ -19,6 +19,7 @@ def _candidate() -> Candidate:
         display_name="test",
         family=CandidateFamily.CHAT,
         max_tokens=128,
+        tiers=["tier_1"],
         binding=CandidateBinding(
             provider="azure_foundry",
             endpoint="https://example.com",
