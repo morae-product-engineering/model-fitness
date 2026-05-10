@@ -1,0 +1,113 @@
+# MLI rubric v0.1 — first concrete rubric for the Morae Legal Intelligence
+# product. Reference: https://morae.atlassian.net/wiki/spaces/MLI/pages/218628525
+#
+# Three tiers, each with deterministic evaluators only in v0.1. Tier 3 uses
+# regex/json_schema as a stand-in for the LLM judge that lands with Slice 6;
+# this is documented in KNOWN_GAPS.md and surfaces in the rubric as
+# `judge` placeholder config (no judge runs on the matrix engine yet).
+#
+# Per-dimension `evaluator` references the registered EvaluatorPlugin name
+# (mmfp/evaluators/_registry.py). Loader derives the engine's
+# `dimension_evaluators` mapping from these — single source of truth.
+
+schema_version: v1
+version: v0.1
+
+tiers:
+  - id: tier_1
+    name: Classification & Routing
+    intent: Classify legal text or route requests to the right downstream skill
+    mode: single_turn
+    dimensions:
+      - id: classification_accuracy
+        name: Classification accuracy
+        description: Output label exactly matches the expected category
+        weight: 60
+        method: deterministic
+        direction: higher_is_better
+        evaluator: exact_match
+      - id: routing_validity
+        name: Routing validity
+        description: Output is one of the allowed routing labels
+        weight: 40
+        method: deterministic
+        direction: higher_is_better
+        evaluator: regex_match
+
+  - id: tier_2
+    name: Structured Generation
+    # Two dimensions in v0.1 — one evaluator per dimension. Multiple
+    # dimensions sharing an evaluator would all read the same `expected`
+    # slot and produce identical scores; broaden to per-dimension expected
+    # payloads when the rubric needs more shape (likely with the LLM judge
+    # in Slice 6).
+    intent: Generate JSON conforming to a schema with format-compliant field values
+    mode: single_turn
+    dimensions:
+      - id: schema_validity
+        name: Schema validity
+        description: Output is JSON and validates against the expected schema
+        weight: 60
+        method: deterministic
+        direction: higher_is_better
+        evaluator: json_schema
+      - id: format_compliance
+        name: Format compliance
+        description: Output contains a value matching the expected pattern (e.g. ISO date)
+        weight: 40
+        method: deterministic
+        direction: higher_is_better
+        evaluator: regex_match
+
+  - id: tier_3
+    name: Synthesis
+    # v0.1 limitation: no LLM judge yet — Slice 6 (MLI-219+) introduces it.
+    # The two deterministic dimensions below approximate qualitative review
+    # without producing misleading scores. Recorded in KNOWN_GAPS.md.
+    intent: Synthesise a structured legal answer with citations and recommendations
+    mode: single_turn
+    dimensions:
+      - id: citation_presence
+        name: Citation presence
+        description: Output cites a section or authority matching the expected pattern
+        weight: 60
+        method: deterministic
+        direction: higher_is_better
+        evaluator: regex_match
+      - id: structural_completeness
+        name: Structural completeness
+        description: Output is JSON with summary / citations / recommendations sections
+        weight: 40
+        method: deterministic
+        direction: higher_is_better
+        evaluator: json_schema
+
+gates:
+  - id: gate.compliance.eu_residency
+    description: Provider must keep request and response data in the EU
+    applies_to_tiers: []  # all tiers
+  - id: gate.compliance.no_training_on_data
+    description: Provider must not train on Morae prompts or completions
+    applies_to_tiers: []
+
+# Placeholder: configured but not yet executed. The LLM judge plugin is
+# Slice 6 territory (MLI-219+); Tier 3 dimensions in v0.1 use the
+# deterministic evaluators above. KNOWN_GAPS.md tracks the gap.
+judge:
+  model: claude-sonnet-4-5
+  provider: anthropic
+  version_pin: "2025-10-01"
+  calibration_set: products/mli/datasets/judge_calibration.jsonl
+  temperature: "0.0"
+  human_sample_rate: "0.10"
+  drift_threshold: "0.85"
+
+thresholds:
+  approved_primary_min: "75"
+  approved_fallback_min: "70"
+  rejected_max: "60"
+  tiebreak_band: "3"
+
+observability:
+  langsmith_endpoint: https://eu.api.smith.langchain.com
+  langsmith_project: mmfp-mli-dev

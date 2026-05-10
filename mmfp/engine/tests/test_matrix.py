@@ -81,6 +81,7 @@ def _rubric_three_tiers() -> Rubric:
                         weight=Decimal("100"),
                         method=Method.DETERMINISTIC,
                         direction=Direction.HIGHER_IS_BETTER,
+                        evaluator="exact_match",
                     )
                 ],
             ),
@@ -96,6 +97,7 @@ def _rubric_three_tiers() -> Rubric:
                         description="json schema validation",
                         weight=Decimal("100"),
                         method=Method.DETERMINISTIC,
+                        evaluator="json_schema",
                     )
                 ],
             ),
@@ -111,6 +113,7 @@ def _rubric_three_tiers() -> Rubric:
                         description="regex check",
                         weight=Decimal("100"),
                         method=Method.DETERMINISTIC,
+                        evaluator="regex_match",
                     )
                 ],
             ),
@@ -177,6 +180,7 @@ def _candidate(
         display_name=id,
         family=family,
         max_tokens=max_tokens,
+        tiers=["tier_1", "tier_2", "tier_3"],
         binding=CandidateBinding(
             provider="azure_foundry",
             endpoint="https://example.com",
@@ -404,6 +408,7 @@ def test_evaluator_with_reasoning_field_receives_reasoning_content():
                         description="x",
                         weight=Decimal("100"),
                         method=Method.QUALITATIVE,
+                        evaluator="_test_reasoning_evaluator",
                     )
                 ],
             )
@@ -458,6 +463,7 @@ def test_reasoning_evaluator_on_chat_model_marks_errored():
                         description="x",
                         weight=Decimal("100"),
                         method=Method.QUALITATIVE,
+                        evaluator="_test_reasoning_evaluator",
                     )
                 ],
             )
@@ -610,6 +616,7 @@ def test_evaluator_raising_is_captured_as_errored_score():
                         description="x",
                         weight=Decimal("100"),
                         method=Method.DETERMINISTIC,
+                        evaluator="_test_boom",
                     )
                 ],
             )

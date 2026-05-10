@@ -12,6 +12,11 @@ dependencies = [
     # per evaluator scoring. SDK auto no-ops when LANGSMITH_API_KEY is unset
     # so unit tests don't have to mock it. EU endpoint convention from MLI-167.
     "langsmith>=0.2",
+    # MLI-173: rubric / candidates configs ship as YAML; the loader and tests
+    # parse them via PyYAML. Read-only consumption (no round-trip), so plain
+    # PyYAML is enough — ruamel.yaml's comment-preserving features aren't
+    # earned yet.
+    "pyyaml>=6.0",
 ]
 
 [project.optional-dependencies]

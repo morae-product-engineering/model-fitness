@@ -14,6 +14,12 @@
           "$ref": "#/$defs/Direction",
           "default": "higher_is_better"
         },
+        "evaluator": {
+          "description": "Registered evaluator name (e.g. 'exact_match', 'json_schema'); must match a key in the EvaluatorPlugin registry.",
+          "minLength": 1,
+          "title": "Evaluator",
+          "type": "string"
+        },
         "id": {
           "description": "Stable identifier, e.g. 'classification_accuracy'",
           "minLength": 1,
@@ -50,7 +56,8 @@
         "name",
         "description",
         "weight",
-        "method"
+        "method",
+        "evaluator"
       ],
       "title": "Dimension",
       "type": "object"

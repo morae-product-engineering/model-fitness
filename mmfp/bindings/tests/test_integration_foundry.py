@@ -36,6 +36,7 @@ def test_invokes_real_deployment():
         display_name=INTEGRATION_DEPLOYMENT,
         family=CandidateFamily.CHAT,
         max_tokens=64,
+        tiers=["tier_1"],
         binding=CandidateBinding(
             provider="azure_foundry",
             endpoint=INTEGRATION_ENDPOINT,

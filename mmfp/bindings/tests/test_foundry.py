@@ -28,6 +28,7 @@ def _candidate(
         display_name=deployment,
         family=family,
         max_tokens=1024,
+        tiers=["tier_1"],
         binding=CandidateBinding(
             provider="azure_foundry",
             endpoint=FAKE_ENDPOINT,

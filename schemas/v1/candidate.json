@@ -122,6 +122,20 @@
     "status": {
       "$ref": "#/$defs/CandidateStatus",
       "default": "under_evaluation"
+    },
+    "tiers": {
+      "description": "Tiers this candidate is being evaluated against",
+      "items": {
+        "enum": [
+          "tier_1",
+          "tier_2",
+          "tier_3"
+        ],
+        "type": "string"
+      },
+      "minItems": 1,
+      "title": "Tiers",
+      "type": "array"
     }
   },
   "required": [
@@ -129,7 +143,8 @@
     "display_name",
     "family",
     "max_tokens",
-    "binding"
+    "binding",
+    "tiers"
   ],
   "title": "Candidate",
   "type": "object"

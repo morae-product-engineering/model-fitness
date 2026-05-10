@@ -1,0 +1,160 @@
+# MLI candidate slate — 10 Foundry deployments per MLI-166. Tier candidacy
+# is recorded once, here. Do not duplicate to deployment tags or other configs
+# (MLI-165 single-source-of-truth rule).
+#
+# `max_tokens` is per-candidate, no default. Reasoning-class models (Kimi-K2.6
+# in this slate) need budget headroom for the reasoning trace before visible
+# content emits — see MLI-165 §1 / MLI-166 smoke-test findings.
+#
+# Endpoint and account key live in dev Key Vault (`foundry-account-endpoint`,
+# `foundry-account-key`), shared across all 10 deployments. The binding plugin
+# (mmfp/bindings/foundry) reads them at runtime; this file is safe to commit.
+
+schema_version: v1
+
+candidates:
+  # ---- Tier 1 — Classification & Routing ----
+  - id: phi-4-mini-instruct
+    display_name: Phi-4 mini instruct
+    family: chat
+    max_tokens: 1024
+    tiers: [tier_1]
+    binding:
+      provider: azure_foundry
+      endpoint: https://mmfp-dev-models-resource.cognitiveservices.azure.com
+      deployment: Phi-4-mini-instruct
+      api_version: "2024-12-01-preview"
+      auth_method: api_key_header
+      key_vault_secret_name: foundry-account-key
+    status: under_evaluation
+
+  - id: gpt-4-1-nano
+    display_name: GPT-4.1 nano
+    family: chat
+    max_tokens: 1024
+    tiers: [tier_1]
+    binding:
+      provider: azure_foundry
+      endpoint: https://mmfp-dev-models-resource.cognitiveservices.azure.com
+      deployment: gpt-4.1-nano
+      api_version: "2024-12-01-preview"
+      auth_method: api_key_header
+      key_vault_secret_name: foundry-account-key
+    status: under_evaluation
+
+  - id: llama-4-scout-17b-16e-instruct
+    display_name: Llama-4 Scout 17B 16E Instruct
+    family: chat
+    max_tokens: 1024
+    tiers: [tier_1]
+    binding:
+      provider: azure_foundry
+      endpoint: https://mmfp-dev-models-resource.cognitiveservices.azure.com
+      deployment: Llama-4-Scout-17B-16E-Instruct
+      api_version: "2024-12-01-preview"
+      auth_method: api_key_header
+      key_vault_secret_name: foundry-account-key
+    status: under_evaluation
+
+  - id: mistral-small-2503
+    display_name: Mistral Small 2503
+    family: chat
+    max_tokens: 1024
+    tiers: [tier_1]
+    binding:
+      provider: azure_foundry
+      endpoint: https://mmfp-dev-models-resource.cognitiveservices.azure.com
+      deployment: mistral-small-2503
+      api_version: "2024-12-01-preview"
+      auth_method: api_key_header
+      key_vault_secret_name: foundry-account-key
+    status: under_evaluation
+
+  # ---- Cross-tier (Tier 1 + Tier 2) ----
+  - id: gpt-4-1-mini
+    display_name: GPT-4.1 mini
+    family: chat
+    max_tokens: 1024
+    tiers: [tier_1, tier_2]
+    binding:
+      provider: azure_foundry
+      endpoint: https://mmfp-dev-models-resource.cognitiveservices.azure.com
+      deployment: gpt-4.1-mini
+      api_version: "2024-12-01-preview"
+      auth_method: api_key_header
+      key_vault_secret_name: foundry-account-key
+    status: under_evaluation
+
+  # ---- Cross-tier (Tier 2 + Tier 3) ----
+  - id: gpt-4o
+    display_name: GPT-4o
+    family: chat
+    max_tokens: 1024
+    tiers: [tier_2, tier_3]
+    binding:
+      provider: azure_foundry
+      endpoint: https://mmfp-dev-models-resource.cognitiveservices.azure.com
+      deployment: gpt-4o
+      api_version: "2024-12-01-preview"
+      auth_method: api_key_header
+      key_vault_secret_name: foundry-account-key
+    status: under_evaluation
+
+  - id: kimi-k2-6
+    display_name: Kimi K2.6
+    family: reasoning
+    # MLI-166 confirmed Kimi spends 100+ completion tokens on reasoning before
+    # emitting visible content. 4096 gives enough headroom for Tier 2/Tier 3
+    # outputs after the reasoning trace; raise if cells start truncating.
+    max_tokens: 4096
+    tiers: [tier_2, tier_3]
+    binding:
+      provider: azure_foundry
+      endpoint: https://mmfp-dev-models-resource.cognitiveservices.azure.com
+      deployment: Kimi-K2.6
+      api_version: "2024-12-01-preview"
+      auth_method: api_key_header
+      key_vault_secret_name: foundry-account-key
+    status: under_evaluation
+
+  - id: llama-4-maverick-17b-128e-instruct-fp8
+    display_name: Llama-4 Maverick 17B 128E Instruct FP8
+    family: chat
+    max_tokens: 1024
+    tiers: [tier_2, tier_3]
+    binding:
+      provider: azure_foundry
+      endpoint: https://mmfp-dev-models-resource.cognitiveservices.azure.com
+      deployment: Llama-4-Maverick-17B-128E-Instruct-FP8
+      api_version: "2024-12-01-preview"
+      auth_method: api_key_header
+      key_vault_secret_name: foundry-account-key
+    status: under_evaluation
+
+  - id: mistral-large-3
+    display_name: Mistral Large 3
+    family: chat
+    max_tokens: 1024
+    tiers: [tier_2]
+    binding:
+      provider: azure_foundry
+      endpoint: https://mmfp-dev-models-resource.cognitiveservices.azure.com
+      deployment: Mistral-Large-3
+      api_version: "2024-12-01-preview"
+      auth_method: api_key_header
+      key_vault_secret_name: foundry-account-key
+    status: under_evaluation
+
+  - id: mistral-large-3-2
+    display_name: Mistral Large 3 (slot 2)
+    family: chat
+    max_tokens: 1024
+    tiers: [tier_3]
+    binding:
+      provider: azure_foundry
+      endpoint: https://mmfp-dev-models-resource.cognitiveservices.azure.com
+      deployment: Mistral-Large-3-2
+      api_version: "2024-12-01-preview"
+      auth_method: api_key_header
+      key_vault_secret_name: foundry-account-key
+    status: under_evaluation

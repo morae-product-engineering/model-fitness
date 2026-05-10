@@ -11,10 +11,13 @@ keeps that footgun off the operator.
 from __future__ import annotations
 
 from enum import Enum
+from typing import Literal
 
-from pydantic import BaseModel, Field, HttpUrl
+from pydantic import BaseModel, Field, HttpUrl, model_validator
 
 from mmfp.models._common import MMFP_MODEL_CONFIG, SCHEMA_VERSION, SchemaVersion
+
+TierId = Literal["tier_1", "tier_2", "tier_3"]
 
 
 class CandidateFamily(str, Enum):
@@ -94,5 +97,18 @@ class Candidate(BaseModel):
         ),
     )
     binding: CandidateBinding
+    # Tier candidacy is recorded once, here. MLI-166's tagging is for
+    # discoverability; tier-fit lives only in the candidate slate per
+    # MLI-165's "single source of truth per item" rule.
+    tiers: list[TierId] = Field(
+        min_length=1,
+        description="Tiers this candidate is being evaluated against",
+    )
     status: CandidateStatus = CandidateStatus.UNDER_EVALUATION
     notes: str | None = Field(default=None)
+
+    @model_validator(mode="after")
+    def _unique_tiers(self) -> "Candidate":
+        if len(set(self.tiers)) != len(self.tiers):
+            raise ValueError(f"candidate '{self.id}' has duplicate tiers: {self.tiers}")
+        return self
