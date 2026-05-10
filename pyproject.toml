@@ -7,15 +7,16 @@ dependencies = [
     "uvicorn[standard]>=0.29",
     "pydantic>=2.7",
     "jsonschema>=4.21",
+    "httpx>=0.27",
 ]
 
 [project.optional-dependencies]
-# Dev tooling required by CI. ruff is the linter (lint-python job); pytest +
-# httpx (FastAPI TestClient backend) cover unit-python.
+# Dev tooling required by CI. ruff is the linter (lint-python job); pytest
+# covers unit-python (httpx is now a runtime dep — FastAPI TestClient and
+# the Foundry binding both use it).
 dev = [
     "pytest>=8",
     "ruff>=0.6",
-    "httpx>=0.27",
 ]
 
 [tool.setuptools.packages.find]
@@ -26,6 +27,7 @@ include = ["mmfp*"]
 # Repo root should normally be on sys.path automatically via editable install.
 markers = [
     "slice_acceptance: deliberately-red tests that gate slice completion; pass when the slice's implementation tasks land. Excluded from the standard unit-test CI job.",
+    "integration: hits a real external service (Foundry, LangSmith, ...); skipped by default and gated on env-var presence. Excluded from the standard unit-test CI job.",
 ]
 
 [tool.ruff]
