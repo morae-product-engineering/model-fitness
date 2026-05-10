@@ -66,6 +66,15 @@ class EvaluatorScore(BaseModel):
     source_field: SourceField = SourceField.CONTENT
     latency_ms: int | None = Field(default=None, ge=0)
     cost_usd: Decimal | None = Field(default=None, ge=Decimal("0"))
+    reason: str | None = Field(
+        default=None,
+        description=(
+            "Short human-readable explanation of the score (e.g. 'exact match', "
+            "'json missing key foo'). Distinct from `error`: `reason` describes "
+            "a normal pass/fail outcome; `error` is set only when the evaluator "
+            "itself failed to run."
+        ),
+    )
     error: str | None = Field(
         default=None,
         description="Set if evaluator failed; raw_value undefined",
