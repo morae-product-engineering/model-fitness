@@ -1,0 +1,263 @@
+# Baseline matrix CI seed (MLI-177)
+#
+# Runs `mmfp run-matrix --product mli` against real Foundry deployments,
+# uploads the resulting SQLite to Azure Blob Storage, and rotates the
+# `MMFP_SEED_BLOB_URL` env var on `ca-mmfp-api-dev` so the next API
+# revision downloads the fresh seed on startup (see mmfp/api/seed.py).
+#
+# Triggers
+# --------
+#   workflow_dispatch        — manual seed (always available)
+#   push to main, on paths   — auto re-seed when the rubric, candidate
+#                               slate, golden datasets, engine, evaluators,
+#                               bindings, models, or this workflow itself
+#                               change. UI / docs / e2e edits don't pay the
+#                               Foundry budget.
+#
+# Trigger branch choice
+# ---------------------
+# MLI-177 originally specified `develop`. This repo's integration branch is
+# `main` (ci.yml builds + deploys from main; no develop branch exists).
+# Seeding `main` keeps "what's deployed to dev" and "what was scored against"
+# in lockstep. Surfaced in the closing comment as a decision worth review.
+#
+# Sequencing with ci.yml
+# ----------------------
+# Both workflows can land on the same commit. They don't race in practice
+# because `containerapp update` is field-level: ci.yml's `--image` doesn't
+# touch env vars, and this workflow's `--set-env-vars` doesn't touch the
+# image. If ci.yml lands after this seed, the new image still carries
+# `MMFP_SEED_BLOB_URL` and re-downloads the seed on the next revision boot.
+#
+# Auth
+# ----
+# OIDC federated credential (no long-lived secrets), matching ci.yml /
+# verify-oidc.yml. The workflow's service principal needs three RBAC
+# assignments not yet provisioned at the time of writing — surfaced as
+# pending in the MLI-177 closing comment:
+#   * Key Vault Secrets User on `kv-uks-mmfp-dev`
+#   * Storage Blob Data Contributor on the seed container
+#   * Storage Blob Delegator on the storage account (user-delegated SAS)
+#
+# LangSmith
+# ---------
+# LangSmith Plus-tier procurement is pending; free-tier quota will exhaust
+# after a small number of runs. The KV fetch is `if`-gated and a missing /
+# unreadable `langsmith-api-key` logs a workflow warning and continues.
+# The `@traceable` decorator in mmfp.engine.matrix auto-no-ops when
+# `LANGSMITH_API_KEY` is unset; trace-upload failures inside the SDK happen
+# on a background thread and never surface to the engine. Both together
+# mean quota exhaustion can't fail the seed.
+
+name: Baseline Matrix (seed dev)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "products/**"
+      - "mmfp/engine/**"
+      - "mmfp/cli/**"
+      - "mmfp/evaluators/**"
+      - "mmfp/bindings/**"
+      - "mmfp/models/**"
+      - "mmfp/products/**"
+      - "mmfp/persistence/**"
+      - ".github/workflows/baseline-matrix.yml"
+
+# Serialize seed runs on the same ref. Newer runs cancel in-flight ones
+# (a re-seed mid-run would land stale data anyway).
+concurrency:
+  group: baseline-matrix-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  seed:
+    name: Run baseline matrix and seed dev
+    runs-on: ubuntu-latest
+    # Cost guard: matrix runs against 10 Foundry candidates × 3 tiers ×
+    # small golden datasets should complete in single-digit minutes. 30 min
+    # is the hard backstop; an anomaly (stuck binding, runaway retry loop)
+    # trips this before it trips Wayne's £5 budget.
+    timeout-minutes: 30
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+      KV_NAME: kv-uks-mmfp-dev
+      STORAGE_ACCOUNT: ${{ vars.MMFP_SEED_STORAGE_ACCOUNT }}
+      SEED_CONTAINER: mmfp-seed
+      SEED_BLOB: mli/mmfp.db
+      API_APP: ca-mmfp-api-dev
+      MMFP_DB_PATH: data/mmfp.db
+      MMFP_PRODUCTS_DIR: products
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install package
+        # No dev extras — this is a production-shape invocation. The CLI's
+        # console-script entry (`mmfp = "mmfp.cli.__main__:entry"`) is
+        # registered by the editable install.
+        run: pip install -e .
+
+      - name: Log in to Azure (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Fetch Foundry credentials from Key Vault
+        # Account key is required; endpoint is informational (current
+        # `azure_foundry` binding reads the endpoint from candidates.yaml,
+        # not the env). Pulling it anyway keeps the workflow lined up with
+        # the candidates.yaml comment that names both as KV-resident.
+        run: |
+          set -euo pipefail
+          FOUNDRY_KEY=$(az keyvault secret show \
+            --vault-name "$KV_NAME" --name foundry-account-key \
+            --query value -o tsv)
+          echo "::add-mask::$FOUNDRY_KEY"
+          echo "FOUNDRY_ACCOUNT_KEY=$FOUNDRY_KEY" >> "$GITHUB_ENV"
+
+          if FOUNDRY_ENDPOINT=$(az keyvault secret show \
+              --vault-name "$KV_NAME" --name foundry-account-endpoint \
+              --query value -o tsv 2>/dev/null); then
+            echo "::add-mask::$FOUNDRY_ENDPOINT"
+            echo "FOUNDRY_ACCOUNT_ENDPOINT=$FOUNDRY_ENDPOINT" >> "$GITHUB_ENV"
+          else
+            echo "::notice::foundry-account-endpoint not present in $KV_NAME; binding will use candidates.yaml endpoint"
+          fi
+
+      - name: Fetch LangSmith credentials (non-fatal)
+        # Free-tier quota will exhaust; secret may be missing during the
+        # Plus-tier procurement window. The engine no-ops without the key,
+        # so falling through here is the correct behaviour.
+        run: |
+          set -euo pipefail
+          if LANGSMITH_KEY=$(az keyvault secret show \
+              --vault-name "$KV_NAME" --name langsmith-api-key \
+              --query value -o tsv 2>/dev/null); then
+            echo "::add-mask::$LANGSMITH_KEY"
+            {
+              echo "LANGSMITH_API_KEY=$LANGSMITH_KEY"
+              echo "LANGSMITH_TRACING=true"
+              echo "LANGSMITH_PROJECT=mmfp-mli-dev"
+              echo "LANGSMITH_ENDPOINT=https://eu.api.smith.langchain.com"
+            } >> "$GITHUB_ENV"
+          else
+            echo "::warning::LangSmith API key unavailable from $KV_NAME — matrix will run without tracing"
+          fi
+
+      - name: Print run plan (cost sanity)
+        # --dry-run echoes per-tier candidate / dataset counts. If the plan
+        # ever balloons unexpectedly (a candidate slate doubles, a dataset
+        # grows 10x), it surfaces in the logs before any Foundry call.
+        run: python -m mmfp.cli run-matrix --product mli --dry-run
+
+      - name: Run baseline matrix
+        # Captures the CLI's human summary into a file so the next step can
+        # extract `run_id` for the workflow summary without re-parsing
+        # stdout from a multi-thousand-line log.
+        id: run
+        run: |
+          set -euo pipefail
+          mkdir -p data
+          python -m mmfp.cli run-matrix --product mli | tee run-output.txt
+          RUN_ID=$(grep -E '^run_id:' run-output.txt | head -1 | awk '{print $2}')
+          echo "run_id=${RUN_ID}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload seed blob to storage
+        run: |
+          set -euo pipefail
+          az storage blob upload \
+            --account-name "$STORAGE_ACCOUNT" \
+            --container-name "$SEED_CONTAINER" \
+            --name "$SEED_BLOB" \
+            --file "$MMFP_DB_PATH" \
+            --auth-mode login \
+            --overwrite
+
+      - name: Rotate seed-URL env var on dev Container App
+        # User-delegated SAS — 14-day TTL. Re-seed runs land more often
+        # than this, so the URL stays valid in practice. Even if it does
+        # expire between seeds, the API's startup hook is non-fatal:
+        # /health stays up, scoreboard returns 404 until the next seed.
+        run: |
+          set -euo pipefail
+          EXPIRY=$(date -u -d '+14 days' +%Y-%m-%dT%H:%MZ)
+          SAS=$(az storage blob generate-sas \
+            --account-name "$STORAGE_ACCOUNT" \
+            --container-name "$SEED_CONTAINER" \
+            --name "$SEED_BLOB" \
+            --permissions r \
+            --expiry "$EXPIRY" \
+            --https-only \
+            --as-user --auth-mode login \
+            --output tsv)
+          BLOB_URL="https://${STORAGE_ACCOUNT}.blob.core.windows.net/${SEED_CONTAINER}/${SEED_BLOB}?${SAS}"
+          echo "::add-mask::$BLOB_URL"
+          # Field-level update — does not touch image, replicas, or other
+          # env vars. ci.yml's --image deploys interleave safely.
+          az containerapp update \
+            --name "$API_APP" \
+            --resource-group "$RG" \
+            --set-env-vars "MMFP_SEED_BLOB_URL=${BLOB_URL}" \
+            > /dev/null
+
+      - name: Wait for dev API to come up on new revision
+        id: verify
+        run: |
+          set -euo pipefail
+          API_FQDN=$(az containerapp show \
+            --name "$API_APP" --resource-group "$RG" \
+            --query 'properties.configuration.ingress.fqdn' -o tsv)
+          API_URL="https://${API_FQDN}"
+          echo "api_url=${API_URL}" >> "$GITHUB_OUTPUT"
+
+          # /health is the contractual liveness probe (mmfp/api/main.py).
+          # Container Apps' built-in revision health-gate already blocks
+          # traffic until /health passes, so once we observe 200 here the
+          # new revision has finished its lifespan hook (seed download).
+          for i in $(seq 1 30); do
+            if curl -fsS --max-time 5 "${API_URL}/health" > /dev/null; then
+              echo "API /health OK after ${i} attempt(s)"
+              break
+            fi
+            sleep 10
+            if [ "$i" -eq 30 ]; then
+              echo "::error::API did not respond to /health within 5 minutes"
+              exit 1
+            fi
+          done
+
+          # Scoreboard 200 means the seed downloaded *and* the new run is
+          # in the DB the API is reading. 404 here means seed failed
+          # silently — surface it as a workflow failure so the seed run
+          # doesn't claim success on a still-empty dev DB.
+          if ! curl -fsS --max-time 10 "${API_URL}/api/products/mli/scoreboard" > /dev/null; then
+            echo "::error::Scoreboard endpoint did not return 200 — seed download may have failed"
+            exit 1
+          fi
+
+      - name: Write workflow summary
+        if: always()
+        run: |
+          {
+            echo "### Baseline matrix seed"
+            echo ""
+            echo "- **Run ID:** \`${{ steps.run.outputs.run_id || 'n/a' }}\`"
+            echo "- **Dev API:** ${{ steps.verify.outputs.api_url || 'n/a' }}"
+            echo "- **Seed blob:** \`${STORAGE_ACCOUNT}/${SEED_CONTAINER}/${SEED_BLOB}\`"
+            echo "- **Commit:** \`${{ github.sha }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -3,17 +3,35 @@
 Exposes /health and /api/runs/skeleton. No auth yet — that comes in a later slice.
 
 MLI-174: scoreboard router mounted here; see mmfp/api/scoreboard.py.
+MLI-177: on startup, optionally download a seed SQLite from blob storage
+into MMFP_DB_PATH so the deployed dev environment shows the latest
+baseline-matrix run. Non-fatal — see mmfp/api/seed.py.
 """
+
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
 
 from mmfp.api import scoreboard
+from mmfp.api.seed import download_seed_if_configured
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    # Runs once per container revision before any request is served.
+    # Synchronous httpx call inside the async hook is intentional: small
+    # SQLite blob, single shot, and we want it to complete before the
+    # event loop accepts traffic.
+    download_seed_if_configured()
+    yield
+
 
 app = FastAPI(
     title="MMFP API",
     description="Morae Model Fitness Platform API",
     version="0.0.1",
+    lifespan=lifespan,
 )
 
 
