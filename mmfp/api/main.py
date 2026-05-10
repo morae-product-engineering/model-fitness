@@ -1,10 +1,14 @@
 """Minimal FastAPI application for the MMFP walking skeleton (MLI-160).
 
 Exposes /health and /api/runs/skeleton. No auth yet — that comes in a later slice.
+
+MLI-174: scoreboard router mounted here; see mmfp/api/scoreboard.py.
 """
 
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
+
+from mmfp.api import scoreboard
 
 app = FastAPI(
     title="MMFP API",
@@ -58,3 +62,6 @@ def get_skeleton_run() -> MatrixRunResponse:
         weighted_score=42,
         source="hardcoded MatrixRun",
     )
+
+
+app.include_router(scoreboard.router)
