@@ -1,0 +1,136 @@
+{
+  "$defs": {
+    "CandidateBinding": {
+      "additionalProperties": false,
+      "description": "How to call a candidate.\n\nMLI-166 confirmed all 10 dev-account deployments \u2014 OpenAI-family AND\nserverless \u2014 serve via a single Azure OpenAI route shape, so a single\nbinding shape suffices for v1. The binding plugin reads these fields; the\nactual API key is resolved from Key Vault by `key_vault_secret_name`, never\nembedded here.",
+      "properties": {
+        "api_version": {
+          "default": "2024-12-01-preview",
+          "description": "Azure OpenAI / Foundry API version pin",
+          "minLength": 1,
+          "title": "Api Version",
+          "type": "string"
+        },
+        "auth_method": {
+          "default": "api_key_header",
+          "description": "How the binding plugin authenticates; 'api_key_header' is the v1 default",
+          "minLength": 1,
+          "title": "Auth Method",
+          "type": "string"
+        },
+        "deployment": {
+          "description": "Provider-side deployment name, e.g. 'Kimi-K2.6'",
+          "minLength": 1,
+          "title": "Deployment",
+          "type": "string"
+        },
+        "endpoint": {
+          "description": "Inference endpoint, e.g. https://*.cognitiveservices.azure.com",
+          "format": "uri",
+          "maxLength": 2083,
+          "minLength": 1,
+          "title": "Endpoint",
+          "type": "string"
+        },
+        "key_vault_secret_name": {
+          "description": "Key Vault secret name holding the API key \u2014 never the key itself",
+          "minLength": 1,
+          "title": "Key Vault Secret Name",
+          "type": "string"
+        },
+        "provider": {
+          "description": "Logical provider id, e.g. 'azure_foundry'",
+          "minLength": 1,
+          "title": "Provider",
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider",
+        "endpoint",
+        "deployment",
+        "key_vault_secret_name"
+      ],
+      "title": "CandidateBinding",
+      "type": "object"
+    },
+    "CandidateFamily": {
+      "description": "Distinguishes reasoning models (whose output carries `reasoning_content`\nalongside `content`) from chat models. Evaluators consult this to decide\nwhether a response's reasoning trace is in scope. See MLI-165 \u00a72.",
+      "enum": [
+        "chat",
+        "reasoning"
+      ],
+      "title": "CandidateFamily",
+      "type": "string"
+    },
+    "CandidateStatus": {
+      "description": "Portfolio state. Promotion to a primary/fallback requires a written\nrationale (recorded out-of-band on the matrix run audit log).",
+      "enum": [
+        "under_evaluation",
+        "approved_primary",
+        "approved_fallback",
+        "rejected"
+      ],
+      "title": "CandidateStatus",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "A model candidate in the slate.",
+  "properties": {
+    "binding": {
+      "$ref": "#/$defs/CandidateBinding"
+    },
+    "display_name": {
+      "minLength": 1,
+      "title": "Display Name",
+      "type": "string"
+    },
+    "family": {
+      "$ref": "#/$defs/CandidateFamily"
+    },
+    "id": {
+      "description": "Stable identifier across runs, e.g. 'kimi-k2-6'",
+      "minLength": 1,
+      "title": "Id",
+      "type": "string"
+    },
+    "max_tokens": {
+      "description": "Required, no default. Reasoning-class candidates need budget headroom for the reasoning trace before visible content emits \u2014 see MLI-165 \u00a71.",
+      "exclusiveMinimum": 0,
+      "title": "Max Tokens",
+      "type": "integer"
+    },
+    "notes": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Notes"
+    },
+    "schema_version": {
+      "const": "v1",
+      "default": "v1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/$defs/CandidateStatus",
+      "default": "under_evaluation"
+    }
+  },
+  "required": [
+    "id",
+    "display_name",
+    "family",
+    "max_tokens",
+    "binding"
+  ],
+  "title": "Candidate",
+  "type": "object"
+}

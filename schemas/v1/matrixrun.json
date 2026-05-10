@@ -1,0 +1,248 @@
+{
+  "$defs": {
+    "EvaluatorScore": {
+      "additionalProperties": false,
+      "description": "One evaluator's output for one (candidate, example, dimension).",
+      "properties": {
+        "cost_usd": {
+          "anyOf": [
+            {
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cost Usd"
+        },
+        "dimension_id": {
+          "minLength": 1,
+          "title": "Dimension Id",
+          "type": "string"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Set if evaluator failed; raw_value undefined",
+          "title": "Error"
+        },
+        "evaluator_id": {
+          "description": "Plugin id producing this score",
+          "minLength": 1,
+          "title": "Evaluator Id",
+          "type": "string"
+        },
+        "latency_ms": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Latency Ms"
+        },
+        "normalized_score": {
+          "anyOf": [
+            {
+              "maximum": 100.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "description": "0\u2013100 normalised score; mapped from raw via dimension direction/bounds",
+          "title": "Normalized Score"
+        },
+        "passed": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "For pass/fail dimensions; None for continuous-scored dimensions",
+          "title": "Passed"
+        },
+        "raw_value": {
+          "description": "Native evaluator output before normalisation \u2014 float for accuracy, ms for latency, USD for cost, judge score on declared scale.",
+          "title": "Raw Value"
+        },
+        "source_field": {
+          "$ref": "#/$defs/SourceField",
+          "default": "content"
+        }
+      },
+      "required": [
+        "dimension_id",
+        "evaluator_id",
+        "raw_value",
+        "normalized_score"
+      ],
+      "title": "EvaluatorScore",
+      "type": "object"
+    },
+    "MatrixRunResult": {
+      "additionalProperties": false,
+      "description": "One row in the run matrix: candidate \u00d7 example \u00d7 evaluator output.",
+      "properties": {
+        "candidate_id": {
+          "minLength": 1,
+          "title": "Candidate Id",
+          "type": "string"
+        },
+        "completion_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Completion Tokens"
+        },
+        "dataset_id": {
+          "minLength": 1,
+          "title": "Dataset Id",
+          "type": "string"
+        },
+        "example_id": {
+          "minLength": 1,
+          "title": "Example Id",
+          "type": "string"
+        },
+        "finish_reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Finish Reason"
+        },
+        "prompt_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prompt Tokens"
+        },
+        "score": {
+          "$ref": "#/$defs/EvaluatorScore"
+        },
+        "tier_id": {
+          "minLength": 1,
+          "title": "Tier Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "tier_id",
+        "candidate_id",
+        "dataset_id",
+        "example_id",
+        "score"
+      ],
+      "title": "MatrixRunResult",
+      "type": "object"
+    },
+    "SourceField": {
+      "description": "Which response field the evaluator scored.\n\nReasoning models emit `message.content` (visible) and\n`message.reasoning_content` (internal trace). Tier 1 / Tier 2 evaluators\nmust score `content` only \u2014 the trace is noise. Tier 3 may score either.\nSee MLI-165 \u00a72.",
+      "enum": [
+        "content",
+        "reasoning_content"
+      ],
+      "title": "SourceField",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "A complete scoring run: results, rubric pin, timing.\n\nScorecards are built lazily \u2014 the engine emits flat `results`, the UI / API\nasks for `scores_for_tier(tier_id)` when it needs the per-tier ranking.",
+  "properties": {
+    "completed_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Completed At"
+    },
+    "id": {
+      "description": "Run identifier (UUID hex preferred)",
+      "minLength": 1,
+      "title": "Id",
+      "type": "string"
+    },
+    "results": {
+      "items": {
+        "$ref": "#/$defs/MatrixRunResult"
+      },
+      "title": "Results",
+      "type": "array"
+    },
+    "rubric_version": {
+      "description": "Rubric.version pinned at run start; older runs remain re-scoreable",
+      "minLength": 1,
+      "pattern": "^v\\d+\\.\\d+$",
+      "title": "Rubric Version",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "v1",
+      "default": "v1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "started_at": {
+      "format": "date-time",
+      "title": "Started At",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "rubric_version",
+    "started_at"
+  ],
+  "title": "MatrixRun",
+  "type": "object"
+}

@@ -5,6 +5,7 @@ requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.29",
+    "pydantic>=2.7",
 ]
 
 [project.optional-dependencies]
@@ -25,8 +26,6 @@ include = ["mmfp*"]
 
 [tool.ruff]
 # Slice 1 baseline — start permissive, tighten later (P1: earn complexity).
-# We deliberately do NOT exclude `platform/` here: it is a stale __pycache__
-# remnant that contains no .py sources, so ruff finds nothing in it.
 line-length = 100
 target-version = "py312"
 extend-exclude = [

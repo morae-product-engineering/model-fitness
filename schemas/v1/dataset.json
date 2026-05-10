@@ -1,0 +1,107 @@
+{
+  "$defs": {
+    "DatasetExample": {
+      "additionalProperties": false,
+      "description": "One golden example: input plus expected outcome and tags.",
+      "properties": {
+        "expected": {
+          "description": "Evaluator-specific expected outcome \u2014 shape varies by dimension method (e.g. label string, JSON Schema fragment, SQL result-set).",
+          "title": "Expected"
+        },
+        "id": {
+          "description": "Stable id within the dataset",
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "input": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "Input as either a string prompt or a structured payload (e.g. {'system': ..., 'user': ..., 'tools': [...]})",
+          "title": "Input"
+        },
+        "metadata": {
+          "additionalProperties": true,
+          "title": "Metadata",
+          "type": "object"
+        },
+        "tags": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Tags",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "input",
+        "expected"
+      ],
+      "title": "DatasetExample",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "A versioned collection of golden examples for one tier.",
+  "properties": {
+    "description": {
+      "default": "",
+      "title": "Description",
+      "type": "string"
+    },
+    "examples": {
+      "items": {
+        "$ref": "#/$defs/DatasetExample"
+      },
+      "minItems": 1,
+      "title": "Examples",
+      "type": "array"
+    },
+    "id": {
+      "minLength": 1,
+      "title": "Id",
+      "type": "string"
+    },
+    "name": {
+      "minLength": 1,
+      "title": "Name",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "v1",
+      "default": "v1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "tier_id": {
+      "description": "Which tier this dataset feeds",
+      "minLength": 1,
+      "title": "Tier Id",
+      "type": "string"
+    },
+    "version": {
+      "description": "Dataset version, e.g. 'v0.1' or 'v0.1.0'",
+      "minLength": 1,
+      "pattern": "^v\\d+\\.\\d+(?:\\.\\d+)?$",
+      "title": "Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "name",
+    "version",
+    "tier_id",
+    "examples"
+  ],
+  "title": "Dataset",
+  "type": "object"
+}
