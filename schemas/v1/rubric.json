@@ -1,0 +1,394 @@
+{
+  "$defs": {
+    "Dimension": {
+      "additionalProperties": false,
+      "description": "One scorable dimension within a tier.",
+      "properties": {
+        "description": {
+          "description": "What this dimension measures",
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "direction": {
+          "$ref": "#/$defs/Direction",
+          "default": "higher_is_better"
+        },
+        "id": {
+          "description": "Stable identifier, e.g. 'classification_accuracy'",
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "method": {
+          "$ref": "#/$defs/Method"
+        },
+        "name": {
+          "description": "Human-readable label",
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "weight": {
+          "anyOf": [
+            {
+              "maximum": 100.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "description": "Percentage weight within its tier; tier weights sum to 100",
+          "title": "Weight"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "description",
+        "weight",
+        "method"
+      ],
+      "title": "Dimension",
+      "type": "object"
+    },
+    "Direction": {
+      "description": "Whether higher or lower raw values map to higher normalised scores.\n\nLatency and cost dimensions are lower-is-better; everything else defaults\nto higher-is-better.",
+      "enum": [
+        "higher_is_better",
+        "lower_is_better"
+      ],
+      "title": "Direction",
+      "type": "string"
+    },
+    "EvaluationMode": {
+      "enum": [
+        "single_turn",
+        "multi_turn"
+      ],
+      "title": "EvaluationMode",
+      "type": "string"
+    },
+    "Gate": {
+      "additionalProperties": false,
+      "description": "A binary entry condition. Failing any applicable gate excludes a candidate.",
+      "properties": {
+        "applies_to_tiers": {
+          "items": {
+            "enum": [
+              "tier_1",
+              "tier_2",
+              "tier_3"
+            ],
+            "type": "string"
+          },
+          "title": "Applies To Tiers",
+          "type": "array"
+        },
+        "description": {
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "id": {
+          "description": "e.g. 'gate.compliance.soc2'",
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "description"
+      ],
+      "title": "Gate",
+      "type": "object"
+    },
+    "JudgeConfig": {
+      "additionalProperties": false,
+      "description": "Pinned LLM-judge config for inferential dimensions.",
+      "properties": {
+        "calibration_set": {
+          "description": "Path to JSONL of human-curated examples used to verify the judge",
+          "minLength": 1,
+          "title": "Calibration Set",
+          "type": "string"
+        },
+        "drift_threshold": {
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "default": "0.85",
+          "description": "Re-pin when calibration agreement drops below this value",
+          "title": "Drift Threshold"
+        },
+        "human_sample_rate": {
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "default": "0.10",
+          "description": "Fraction of judge scores reviewed by a human curator",
+          "title": "Human Sample Rate"
+        },
+        "model": {
+          "description": "Judge model identifier, e.g. 'claude-sonnet-4-5'",
+          "minLength": 1,
+          "title": "Model",
+          "type": "string"
+        },
+        "provider": {
+          "minLength": 1,
+          "title": "Provider",
+          "type": "string"
+        },
+        "temperature": {
+          "anyOf": [
+            {
+              "maximum": 2.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "default": "0.0",
+          "title": "Temperature"
+        },
+        "version_pin": {
+          "description": "Provider-side version, e.g. '2025-10-01'",
+          "minLength": 1,
+          "title": "Version Pin",
+          "type": "string"
+        }
+      },
+      "required": [
+        "model",
+        "provider",
+        "version_pin",
+        "calibration_set"
+      ],
+      "title": "JudgeConfig",
+      "type": "object"
+    },
+    "Method": {
+      "description": "How a dimension is measured.\n\nMirrors the \"Method\" column of each tier in the rubric reference doc.",
+      "enum": [
+        "deterministic",
+        "metric",
+        "llm_judge",
+        "composite",
+        "qualitative"
+      ],
+      "title": "Method",
+      "type": "string"
+    },
+    "ObservabilityConfig": {
+      "additionalProperties": false,
+      "description": "Per-rubric observability bindings.\n\nLangSmith endpoint lives here, not in env-only config: the rubric YAML is\nauthoritative for the *intent* (EU residency for Morae), and any deployment\nartefact that overrides it has to do so deliberately. See MLI-167.",
+      "properties": {
+        "langsmith_endpoint": {
+          "default": "https://eu.api.smith.langchain.com/",
+          "description": "LangSmith API endpoint \u2014 EU instance for Morae data residency",
+          "format": "uri",
+          "maxLength": 2083,
+          "minLength": 1,
+          "title": "Langsmith Endpoint",
+          "type": "string"
+        },
+        "langsmith_project": {
+          "default": "mmfp-dev",
+          "description": "LangSmith project name; per-environment override expected",
+          "minLength": 1,
+          "title": "Langsmith Project",
+          "type": "string"
+        }
+      },
+      "title": "ObservabilityConfig",
+      "type": "object"
+    },
+    "PortfolioThresholds": {
+      "additionalProperties": false,
+      "description": "Score boundaries that govern candidate status. Versioned with the rubric.",
+      "properties": {
+        "approved_fallback_min": {
+          "anyOf": [
+            {
+              "maximum": 100.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "default": "70",
+          "title": "Approved Fallback Min"
+        },
+        "approved_primary_min": {
+          "anyOf": [
+            {
+              "maximum": 100.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "default": "75",
+          "title": "Approved Primary Min"
+        },
+        "rejected_max": {
+          "anyOf": [
+            {
+              "maximum": 100.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "default": "60",
+          "title": "Rejected Max"
+        },
+        "tiebreak_band": {
+          "anyOf": [
+            {
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "default": "3",
+          "description": "Candidates within this many points of each other are tied",
+          "title": "Tiebreak Band"
+        }
+      },
+      "title": "PortfolioThresholds",
+      "type": "object"
+    },
+    "Tier": {
+      "additionalProperties": false,
+      "description": "One tier in the rubric (Classification & Routing / Structured Generation / Synthesis).",
+      "properties": {
+        "dimensions": {
+          "items": {
+            "$ref": "#/$defs/Dimension"
+          },
+          "minItems": 1,
+          "title": "Dimensions",
+          "type": "array"
+        },
+        "id": {
+          "description": "Stable tier identifier \u2014 kept Literal to enforce the three-tier shape",
+          "enum": [
+            "tier_1",
+            "tier_2",
+            "tier_3"
+          ],
+          "title": "Id",
+          "type": "string"
+        },
+        "intent": {
+          "description": "One-line statement of evaluation intent",
+          "minLength": 1,
+          "title": "Intent",
+          "type": "string"
+        },
+        "mode": {
+          "$ref": "#/$defs/EvaluationMode"
+        },
+        "name": {
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "intent",
+        "mode",
+        "dimensions"
+      ],
+      "title": "Tier",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "The full rubric: tiers, gates, judge, thresholds, observability.",
+  "properties": {
+    "gates": {
+      "items": {
+        "$ref": "#/$defs/Gate"
+      },
+      "title": "Gates",
+      "type": "array"
+    },
+    "judge": {
+      "$ref": "#/$defs/JudgeConfig"
+    },
+    "observability": {
+      "$ref": "#/$defs/ObservabilityConfig"
+    },
+    "schema_version": {
+      "const": "v1",
+      "default": "v1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "thresholds": {
+      "$ref": "#/$defs/PortfolioThresholds"
+    },
+    "tiers": {
+      "items": {
+        "$ref": "#/$defs/Tier"
+      },
+      "minItems": 1,
+      "title": "Tiers",
+      "type": "array"
+    },
+    "version": {
+      "description": "Editable rubric version, e.g. 'v0.1'",
+      "minLength": 1,
+      "pattern": "^v\\d+\\.\\d+$",
+      "title": "Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "version",
+    "tiers",
+    "judge"
+  ],
+  "title": "Rubric",
+  "type": "object"
+}
