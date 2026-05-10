@@ -43,10 +43,10 @@ tagged with `run_id`, `rubric_version`, `tier_id`, `candidate_id`,
 
 Persistence
 -----------
-Returns an in-memory `MatrixRun`. SQLite persistence (mentioned in
-MLI-172's scope) is deferred — no DB layer / migrations / repository
-exist yet, and the acceptance criteria assert in-memory shape. Flagged in
-the closing comment as a follow-up subtask.
+By default returns an in-memory `MatrixRun`; pass `repository=` and
+`product=` to `run()` to persist on success. Persistence is opt-in
+because the unit-test path doesn't need a DB. See MLI-258 and
+ADRs/0001-sqlite-persistence.md for the storage contract.
 """
 
 from __future__ import annotations
@@ -77,6 +77,7 @@ from mmfp.models.matrix_run import (
     SourceField,
 )
 from mmfp.models.rubric import Dimension, Rubric, Tier
+from mmfp.persistence import MatrixRunRepository
 from mmfp.plugins.binding import BindingPlugin
 from mmfp.plugins.evaluator import EvaluatorPlugin
 
@@ -140,13 +141,28 @@ class MatrixEngine:
         candidates: Sequence[Candidate],
         *,
         dimension_evaluators: Mapping[str, str],
+        repository: MatrixRunRepository | None = None,
+        product: str | None = None,
     ) -> MatrixRun:
         """Execute the matrix and return a populated `MatrixRun`.
 
         Validates dimension → evaluator coverage and resolves all evaluators
         before any model is called, so misconfiguration fails fast rather
         than burning a candidate's quota.
+
+        Persistence is opt-in: when `repository` is provided, `product`
+        must also be supplied (and vice versa) — see MLI-258 / ADR-0001
+        for why `product` lives on the row but not on `MatrixRun`. The
+        save happens after the run completes successfully; a partial run
+        is not persisted (engine still returns the in-memory run with
+        errored cells, but that artefact stays out of the DB).
         """
+        if (repository is None) != (product is None):
+            raise ValueError(
+                "repository and product must be provided together "
+                "(persistence requires both, or neither)"
+            )
+
         self._validate_coverage(rubric, dimension_evaluators)
 
         run_id = self._run_id_factory()
@@ -202,13 +218,16 @@ class MatrixEngine:
                         close()
 
         completed_at = self._clock()
-        return MatrixRun(
+        run = MatrixRun(
             id=run_id,
             rubric_version=rubric.version,
             started_at=started_at,
             completed_at=completed_at,
             results=results,
         )
+        if repository is not None and product is not None:
+            repository.save(run, product=product)
+        return run
 
     @staticmethod
     def _validate_coverage(
