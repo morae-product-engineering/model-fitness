@@ -29,3 +29,5 @@ npx playwright test
 # Run Python tests
 pytest
 ```
+
+**Running Playwright locally.** Tests against the deployed dev environment require basic-auth credentials. Export `MMFP_BASIC_AUTH_USER` and `MMFP_BASIC_AUTH_PASS` from 1Password ("MMFP / dev UI basic auth") before running `npx playwright test`. These will be removed when Entra SSO replaces basic auth.

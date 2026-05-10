@@ -2,6 +2,11 @@
 //   1. this file (ui/middleware.ts) and its test (tests/unit/ui-middleware.test.ts)
 //   2. BASIC_AUTH_USER and BASIC_AUTH_PASS env vars on Container App ca-mmfp-ui-dev
 //   3. Key Vault secrets `basic-auth-user` and `basic-auth-pass`
+//   4. `httpCredentials` block in playwright.config.ts
+//   5. MMFP_BASIC_AUTH_USER and MMFP_BASIC_AUTH_PASS env vars on the e2e job
+//      in .github/workflows/ci.yml
+//   6. GitHub repo secrets MMFP_BASIC_AUTH_USER and MMFP_BASIC_AUTH_PASS
+//   7. "Running Playwright locally" note in README.md
 //
 // HTTP Basic Auth gate for the dev UI. Temporary; small handful of users behind
 // Container Apps rate limiting. Threat model does not warrant timing-safe compare.

@@ -332,6 +332,8 @@ jobs:
     continue-on-error: false
     env:
       MMFP_URL: ${{ needs.deploy-dev.outputs.mmfp_url }}
+      MMFP_BASIC_AUTH_USER: ${{ secrets.MMFP_BASIC_AUTH_USER }}
+      MMFP_BASIC_AUTH_PASS: ${{ secrets.MMFP_BASIC_AUTH_PASS }}
       TESTRAIL_URL: ${{ secrets.TESTRAIL_URL }}
       TESTRAIL_USER: ${{ secrets.TESTRAIL_USER }}
       TESTRAIL_API_KEY: ${{ secrets.TESTRAIL_API_KEY }}
