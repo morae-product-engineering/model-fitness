@@ -14,7 +14,6 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Callable
 
-import pytest
 from fastapi.testclient import TestClient
 
 from mmfp.models.candidate import (
@@ -284,8 +283,8 @@ def test_empty_tier_appears_with_empty_candidates_list(tmp_path: Path) -> None:
 
 def test_404_no_runs_for_product(tmp_path: Path) -> None:
     """404 — slate exists but no runs for product."""
-    from mmfp.api.main import app
     from mmfp.api import scoreboard
+    from mmfp.api.main import app
 
     repo = MatrixRunRepository(tmp_path / "empty.db")
 
@@ -313,8 +312,8 @@ def test_404_no_runs_for_product(tmp_path: Path) -> None:
 
 def test_404_unknown_product(tmp_path: Path) -> None:
     """404 — candidate slate file doesn't exist for product."""
-    from mmfp.api.main import app
     from mmfp.api import scoreboard
+    from mmfp.api.main import app
 
     repo = MatrixRunRepository(tmp_path / "nofile.db")
 
