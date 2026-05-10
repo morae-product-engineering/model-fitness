@@ -6,6 +6,7 @@ public contract; signature changes need explicit human approval per
 CLAUDE.md.
 """
 
+from mmfp.plugins.binding import BindingPlugin
 from mmfp.plugins.evaluator import EvaluatorPlugin
 
-__all__ = ["EvaluatorPlugin"]
+__all__ = ["BindingPlugin", "EvaluatorPlugin"]
