@@ -111,6 +111,10 @@ If you're running as the wrong tier — the prompt is more ambiguous than the re
 
 **Slice acceptance tests:** Tests that gate a slice's completion (deliberately red until the slice's implementation lands) are marked with `@pytest.mark.slice_acceptance` (or module-level `pytestmark = pytest.mark.slice_acceptance`). The standard `Unit Tests (pytest)` CI job excludes them; a separate `Slice Acceptance Tests (pytest)` job runs them with `continue-on-error: true` so deliberate-red doesn't block downstream CI. When the slice's implementation lands and the test goes green, the marker stays on the file — its purpose is identification, not a temporary skip.
 
+**Defer imports of not-yet-existent symbols into the test body**, not the module top-level. Module-level imports that fail (`from mmfp.engine.matrix import MatrixEngine` before MLI-172 lands) cause pytest collection to fail BEFORE `-m` filtering can deselect the test, blocking the whole pipeline. With the import inside the test body, the file collects cleanly, the test FAILs (assertion-time) rather than ERRORs (collection-time), and `-m` filtering works as designed.
+
+Slice acceptance tests can fail with different errors locally vs in CI depending on what's missing (missing fixtures, missing engine, missing UI). All such failures are correct deliberate-red. Document the expected failure modes in the test file's docstring so a future engineer debugging "why is this red?" finds the answer is "because it's supposed to be."
+
 All tests deterministic — no wall-clock dependence, no unfixed random seeds, no order-dependence. The TestRail reporter (`tests/reporters/testrail-reporter.ts`) auto-creates cases from Playwright titles. Test code is the source of truth — don't manually create cases in TestRail.
 
 ## ADRs
