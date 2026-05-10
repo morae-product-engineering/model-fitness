@@ -1,9 +1,19 @@
 import { defineConfig } from 'vitest/config';
+import react from '@vitejs/plugin-react';
+import path from 'path';
 
 export default defineConfig({
+  plugins: [react()],
+  resolve: {
+    alias: {
+      // Mirror ui/tsconfig.json paths so tests can resolve @/* imports.
+      '@': path.resolve(__dirname, 'ui'),
+    },
+  },
   test: {
-    // Only collect unit tests; the Playwright `tests/e2e/*.spec.ts` files are
-    // run via `npm run test:e2e` and use Playwright's own test runner.
-    include: ['tests/**/*.test.ts'],
+    environment: 'jsdom',
+    setupFiles: ['./tests/setup.ts'],
+    // Collect unit tests and tsx component tests; exclude e2e specs.
+    include: ['tests/**/*.test.{ts,tsx}'],
   },
 });
