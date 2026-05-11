@@ -438,7 +438,13 @@ jobs:
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Upload Playwright report to static website
+        # The e2e job's pass/fail conclusion is about the spec, not the
+        # report-hosting AC. Static-website enablement on the storage
+        # account is a one-off infra step; if it hasn't landed yet, the
+        # upload errors, this step soft-fails, and the step summary still
+        # surfaces what was attempted.
         if: ${{ always() && vars.MMFP_SEED_STORAGE_ACCOUNT != '' }}
+        continue-on-error: true
         run: |
           set -euo pipefail
           if [[ ! -d playwright-report ]]; then
