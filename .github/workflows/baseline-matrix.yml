@@ -198,6 +198,34 @@ jobs:
           pip install "pytest>=8"
           pytest -m slice_acceptance mmfp/
 
+      - name: Upload SQLite as workflow artifact (debug/recovery)
+        # MLI-177 follow-up: belt-and-braces capture before the blob upload
+        # so the matrix run's persisted output is recoverable from the GitHub
+        # UI on any failure between matrix-run-completion and blob-upload —
+        # including a failed pytest gate or the expired-OIDC-token case
+        # below. Always runs so a £3-6 Foundry spend can't get stranded.
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mmfp-db-${{ github.run_id }}
+          path: ${{ env.MMFP_DB_PATH }}
+          retention-days: 7
+          if-no-files-found: warn
+
+      - name: Re-authenticate to Azure (OIDC token refresh)
+        # MLI-177 follow-up: matrix + pytest steps can exceed the 5-15 min
+        # OIDC federated-token window. The original azure/login at the top
+        # of the job leaves post-matrix az commands using an expired token
+        # by the time they fire (AADSTS700024 observed empirically on the
+        # 2026-05-11 long run). Re-minting here is the cheapest reliable
+        # fix; one refresh covers the blob upload + rotate + verify steps
+        # below — they all fire within seconds of this login.
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
       - name: Upload seed blob to storage
         run: |
           set -euo pipefail
