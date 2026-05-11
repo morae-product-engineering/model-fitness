@@ -8,6 +8,14 @@ For each (candidate × dataset_example × dimension) cell, the engine:
      evaluator per `EvaluatorPlugin.scores_field` (MLI-165 §2; MLI-170).
   3. Records a `MatrixRunResult`.
 
+Tier filtering
+--------------
+A candidate is scored only against the tiers it claims via `Candidate.tiers`
+(MLI-165 single-source-of-truth rule). `(candidate, tier)` pairs where
+`tier.id not in candidate.tiers` are skipped wholesale: no binding call, no
+LangSmith span, no `MatrixRunResult`. Each run emits one INFO log
+summarising the skipped-pair counts as an audit trail (MLI-259).
+
 Concurrency
 -----------
 Per-candidate `ThreadPoolExecutor` (default `max_workers=4`). Within a
@@ -52,6 +60,7 @@ ADRs/0001-sqlite-persistence.md for the storage contract.
 from __future__ import annotations
 
 import json
+import logging
 import time
 import uuid
 from collections import defaultdict
@@ -80,6 +89,8 @@ from mmfp.models.rubric import Dimension, Rubric, Tier
 from mmfp.persistence import MatrixRunRepository
 from mmfp.plugins.binding import BindingPlugin
 from mmfp.plugins.evaluator import EvaluatorPlugin
+
+logger = logging.getLogger(__name__)
 
 
 def _utc_now() -> datetime:
@@ -193,6 +204,10 @@ class MatrixEngine:
         for dataset in datasets:
             datasets_by_tier[dataset.tier_id].append(dataset)
 
+        self._log_tier_filter_summary(
+            run_id=run_id, rubric=rubric, candidates=candidates
+        )
+
         try:
             results = self._traced_run(
                 rubric=rubric,
@@ -245,6 +260,36 @@ class MatrixEngine:
                 f"Every rubric dimension must declare an evaluator."
             )
 
+    @staticmethod
+    def _log_tier_filter_summary(
+        *, run_id: str, rubric: Rubric, candidates: Sequence[Candidate]
+    ) -> None:
+        # Single INFO line per run so the next live Foundry run can prove
+        # tier-filtering was applied (MLI-259 acceptance + MLI-178 cost-leak
+        # audit trail). Emitted unconditionally — "ran 19, skipped 0" is just
+        # as useful as the skip-everything case.
+        skipped_by_tier: dict[str, int] = defaultdict(int)
+        ran_by_tier: dict[str, int] = defaultdict(int)
+        for candidate in candidates:
+            for tier in rubric.tiers:
+                if tier.id in candidate.tiers:
+                    ran_by_tier[tier.id] += 1
+                else:
+                    skipped_by_tier[tier.id] += 1
+        tier_order = [tier.id for tier in rubric.tiers]
+        skipped_breakdown = {t: skipped_by_tier.get(t, 0) for t in tier_order}
+        ran_breakdown = {t: ran_by_tier.get(t, 0) for t in tier_order}
+        logger.info(
+            "matrix run %s tier filter: skipped %d (candidate, tier) pairs %s, "
+            "ran %d %s across %d candidate(s)",
+            run_id,
+            sum(skipped_breakdown.values()),
+            skipped_breakdown,
+            sum(ran_breakdown.values()),
+            ran_breakdown,
+            len(candidates),
+        )
+
     @traceable(name="MatrixEngine.run", run_type="chain")
     def _traced_run(
         self,
@@ -293,6 +338,13 @@ class MatrixEngine:
         binding = get_binding(candidate.binding.provider)
         out: list[MatrixRunResult] = []
         for tier in rubric.tiers:
+            # MLI-259: a candidate is only scored against the tiers it claims.
+            # Cells for unclaimed tiers were real measurements but never fed any
+            # routing decision — pure cost leak on Foundry. Skip emits no result,
+            # no binding call, no LangSmith span. Per-run audit summary logged
+            # once up-front in run().
+            if tier.id not in candidate.tiers:
+                continue
             for dataset in datasets_by_tier.get(tier.id, ()):
                 for example in dataset.examples:
                     out.extend(

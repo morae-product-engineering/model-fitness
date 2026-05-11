@@ -12,10 +12,12 @@ bindings hit Azure Foundry.
 
 from __future__ import annotations
 
+import logging
 import threading
 import time
 from datetime import datetime, timezone
 from decimal import Decimal
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -37,6 +39,10 @@ from mmfp.models.rubric import (
 )
 from mmfp.plugins.binding import BindingPlugin
 from mmfp.plugins.evaluator import EvaluatorPlugin
+from mmfp.products.loader import load_candidates
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
+MLI_CANDIDATES_YAML = REPO_ROOT / "products" / "mli" / "candidates.yaml"
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -931,3 +937,118 @@ def test_integration_with_real_evaluators_and_fake_binding():
     t3 = {c.candidate_id: c for c in run.scores_for_tier("tier_3")}
     assert t3["kimi"].weighted_score == Decimal("100")
     assert t3["phi"].weighted_score == Decimal("0")
+
+
+# ---------------------------------------------------------------------------
+# Tier filtering (MLI-259)
+# ---------------------------------------------------------------------------
+
+
+def _canned_response(candidate, prompt, _max_tokens):
+    # Tier-1/2/3 canned answers that match the prompts emitted by
+    # `_datasets_three_tiers()`. Any prompt the engine actually sends gets a
+    # valid response; if filtering broke and we ran a cross-tier cell we'd
+    # still get a number, so the test asserts on the result *grid* shape and
+    # on which (candidate, tier) pairs hit the binding — not on scores.
+    canned = {
+        "classify A": "A",
+        "classify B": "B",
+        "emit json": '{"ok": true}',
+        "answer question": "I love dogs.",
+    }
+    return _ok_response(canned[prompt], candidate.binding.deployment)
+
+
+def test_engine_skips_candidate_tier_pairs_outside_candidate_tiers(caplog):
+    """Real `products/mli/candidates.yaml` slate — only 4 of 10 candidates
+    cover every tier today; the rest are tier-restricted (MLI-178 live
+    Foundry run showed Phi-4 burning Tier 3 cells that never feed a routing
+    decision). Engine must skip `(candidate, tier)` pairs where
+    `tier.id not in candidate.tiers`: no binding call, no LangSmith span,
+    no `MatrixRunResult`.
+    """
+    candidates = load_candidates(MLI_CANDIDATES_YAML)
+    # Sanity: this test depends on the slate having tier-restricted
+    # candidates. If a future slate edit makes every candidate cover every
+    # tier, the test becomes trivially green and we need to revisit.
+    assert any(set(c.tiers) != {"tier_1", "tier_2", "tier_3"} for c in candidates)
+
+    binding = _MockBinding(_canned_response)
+    engine = _make_engine(binding)
+    rubric = _rubric_three_tiers()
+    datasets = _datasets_three_tiers()
+
+    with caplog.at_level(logging.INFO, logger="mmfp.engine.matrix"):
+        run = engine.run(
+            rubric, datasets, candidates, dimension_evaluators=_DEFAULT_EVALUATORS
+        )
+
+    # 1. No result exists for a (candidate, tier) pair outside candidate.tiers.
+    tiers_by_candidate = {c.id: set(c.tiers) for c in candidates}
+    for r in run.results:
+        assert r.tier_id in tiers_by_candidate[r.candidate_id], (
+            f"{r.candidate_id} scored on {r.tier_id} but claims tiers="
+            f"{sorted(tiers_by_candidate[r.candidate_id])}"
+        )
+
+    # 2. Result count matches the filtered grid exactly. The three-tier
+    # rubric in this file has 1 dimension per tier and (2, 1, 1) examples
+    # per tier; expected = sum over candidates of sum over claimed tiers of
+    # examples_per_tier.
+    examples_per_tier = {"tier_1": 2, "tier_2": 1, "tier_3": 1}
+    expected_results = sum(
+        examples_per_tier[t] for c in candidates for t in c.tiers
+    )
+    assert len(run.results) == expected_results
+
+    # 3. Specifically: `phi-4-mini-instruct` (tiers=[tier_1]) does NOT score
+    # against tier_3 even though Tier 3 datasets are present. This is the
+    # exact case called out in the MLI-259 acceptance criteria.
+    phi_results = [r for r in run.results if r.candidate_id == "phi-4-mini-instruct"]
+    assert phi_results, "expected Phi-4 mini to score *some* cells (tier_1)"
+    assert {r.tier_id for r in phi_results} == {"tier_1"}
+
+    # 4. And the cross-tier example: `gpt-4-1-mini` (tiers=[tier_1, tier_2])
+    # is scored on tier_1 and tier_2 but never tier_3.
+    gpt_mini_results = [r for r in run.results if r.candidate_id == "gpt-4-1-mini"]
+    assert {r.tier_id for r in gpt_mini_results} == {"tier_1", "tier_2"}
+
+    # 5. The binding was not invoked for skipped pairs. We can't distinguish
+    # tier directly from a binding call (prompts repeat across tiers via
+    # `_to_prompt`), so assert per (candidate, prompt): a candidate is only
+    # asked prompts whose tier it claims.
+    prompts_by_tier = {
+        "tier_1": {"classify A", "classify B"},
+        "tier_2": {"emit json"},
+        "tier_3": {"answer question"},
+    }
+    allowed_prompts: dict[str, set[str]] = {
+        c.id: set().union(*(prompts_by_tier[t] for t in c.tiers)) for c in candidates
+    }
+    for c, prompt, _mt in binding.calls:
+        assert prompt in allowed_prompts[c.id], (
+            f"binding invoked for {c.id} with prompt {prompt!r} but candidate's "
+            f"tiers={sorted(tiers_by_candidate[c.id])} don't cover it"
+        )
+
+    # 6. Single INFO log per run summarising skipped-pair counts and ran-pair
+    # counts (the audit trail MLI-259 requires before the next live Foundry
+    # run, per MLI-178 cost-leak follow-up).
+    summary_records = [
+        rec
+        for rec in caplog.records
+        if rec.name == "mmfp.engine.matrix" and "tier filter" in rec.getMessage()
+    ]
+    assert len(summary_records) == 1
+    msg = summary_records[0].getMessage()
+    # Breakdown by tier present in the message.
+    assert "'tier_1'" in msg and "'tier_2'" in msg and "'tier_3'" in msg
+    # Totals: 16 skipped pairs, 14 ran pairs, 10 candidates (counted from the
+    # live slate above — fails loudly if the slate changes so the next reader
+    # knows to re-derive the expected numbers).
+    total_pairs = len(candidates) * len(rubric.tiers)
+    ran_pairs = sum(len(c.tiers) for c in candidates)
+    skipped_pairs = total_pairs - ran_pairs
+    assert f"skipped {skipped_pairs}" in msg
+    assert f"ran {ran_pairs}" in msg
+    assert f"across {len(candidates)} candidate(s)" in msg
