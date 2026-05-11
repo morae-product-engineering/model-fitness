@@ -2,14 +2,20 @@
 #         to mmfp.engine.matrix) / MLI-258 (engine signature took
 #         `dimension_evaluators=` and the strict `repository=`/`product=`
 #         pair) / MLI-173 (fixtures now load real YAML/JSONL into Pydantic
-#         models; this test threads the new kwargs).
+#         models; this test threads the new kwargs) / MLI-178 (moved hard
+#         gate from ci.yml to baseline-matrix.yml so the test runs against
+#         real Foundry without paying per-PR cost).
 #
-# Slice 2 acceptance test. Stays deliberately red in CI until MLI-177 wires
-# real Foundry credentials into the unit-test runner — the default
-# `azure_foundry` binding makes a live HTTP call the moment a candidate is
-# scored. Locally it goes green when `FOUNDRY_ACCOUNT_KEY` and the matching
-# endpoint env vars are present. The `slice_acceptance` marker keeps it out
-# of the standard unit-test job (`-m "not slice_acceptance"`).
+# Slice 2 acceptance test. Gated green in CI by `.github/workflows/
+# baseline-matrix.yml` — that workflow already authenticates to Foundry
+# (it runs the same matrix as the seed CLI), so adding a pytest step there
+# reuses the credentials. ci.yml's `slice-acceptance-tests` job still
+# excludes Foundry creds and keeps the soft-fail pattern for Slice 3+
+# acceptance tests; this test runs but errors-out there harmlessly.
+#
+# Locally goes green when `FOUNDRY_ACCOUNT_KEY` and the matching endpoint
+# env vars are present. The `slice_acceptance` marker keeps it out of the
+# standard unit-test job (`-m "not slice_acceptance"`).
 #
 # Expected failure modes worth recognising for "why is this red?":
 #   - missing API key → binding raises auth/network error → run completes

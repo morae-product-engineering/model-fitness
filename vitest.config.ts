@@ -8,6 +8,10 @@ export default defineConfig({
     alias: {
       // Mirror ui/tsconfig.json paths so tests can resolve @/* imports.
       '@': path.resolve(__dirname, 'ui'),
+      // MLI-178: next is only installed in ui/node_modules; the root vitest
+      // job can't resolve `next/server` when ui/middleware.ts is transitively
+      // imported. Stub is in tests/stubs/next-server.ts.
+      'next/server': path.resolve(__dirname, 'tests/stubs/next-server.ts'),
     },
   },
   test: {

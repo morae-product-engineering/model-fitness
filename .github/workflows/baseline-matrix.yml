@@ -79,11 +79,14 @@ jobs:
   seed:
     name: Run baseline matrix and seed dev
     runs-on: ubuntu-latest
-    # Cost guard: matrix runs against 10 Foundry candidates × 3 tiers ×
-    # small golden datasets should complete in single-digit minutes. 30 min
-    # is the hard backstop; an anomaly (stuck binding, runaway retry loop)
-    # trips this before it trips Wayne's £5 budget.
-    timeout-minutes: 30
+    # Cost guard: matrix takes ~30 min in practice (10 candidates × 25
+    # examples, max_workers=4) — the original 30-min estimate of
+    # "single-digit minutes" understated Foundry call latency. With the
+    # MLI-178 pytest hard-gate step also re-walking the matrix, total
+    # runtime ~60-70 min. 120 min leaves headroom for one-off slow
+    # deployments (e.g. cold-start Phi-class) while still tripping before
+    # any runaway retry loop. Surfaced as MLI-178 tuning.
+    timeout-minutes: 120
     permissions:
       id-token: write
       contents: read
@@ -176,6 +179,24 @@ jobs:
           python -m mmfp.cli run-matrix --product mli | tee run-output.txt
           RUN_ID=$(grep -E '^run_id:' run-output.txt | head -1 | awk '{print $2}')
           echo "run_id=${RUN_ID}" >> "$GITHUB_OUTPUT"
+
+      - name: Run slice-acceptance pytest (hard gate)
+        # MLI-178: slice-2 acceptance test (`mmfp/tests/test_matrix_run.py`)
+        # gated here rather than ci.yml's `slice-acceptance-tests` job. The
+        # test calls real Foundry via the engine — gating on every PR would
+        # double Foundry spend, gating here piggybacks on the seed run's
+        # already-active creds. ci.yml's slice-acceptance-tests job keeps
+        # its soft-fail pattern for Slice 3+ acceptance tests.
+        #
+        # Note: the test re-walks the same candidate × dataset cells as the
+        # CLI step above, so per-run Foundry cost roughly doubles. Acceptable
+        # because (a) baseline-matrix.yml runs only on merge to main +
+        # workflow_dispatch, not per PR; (b) total stays under the 30-min /
+        # £5 budget for a small slate.
+        run: |
+          set -euo pipefail
+          pip install "pytest>=8"
+          pytest -m slice_acceptance mmfp/
 
       - name: Upload seed blob to storage
         run: |
