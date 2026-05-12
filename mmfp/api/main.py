@@ -13,7 +13,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
 
-from mmfp.api import scoreboard
+from mmfp.api import candidate_detail, scoreboard, trends
 from mmfp.api.seed import download_seed_if_configured
 
 
@@ -83,3 +83,5 @@ def get_skeleton_run() -> MatrixRunResponse:
 
 
 app.include_router(scoreboard.router)
+app.include_router(trends.router)
+app.include_router(candidate_detail.router)
