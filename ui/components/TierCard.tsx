@@ -11,6 +11,14 @@ interface TierCardProps {
 }
 
 export default function TierCard({ tierId, meta, candidates }: TierCardProps) {
+  // Defensive: the scoreboard endpoint already sorts by weighted_score desc
+  // (mmfp/models/matrix_run.py:186), but TierCard owns its render order so a
+  // future caller passing an arbitrary Candidate[] still gets a ranked view.
+  // Stable across equal scores — Array.prototype.sort is stable since ES2019.
+  const ranked = [...candidates].sort(
+    (a, b) => b.weighted_score - a.weighted_score
+  );
+
   return (
     <div
       data-testid={`tier-card-${tierId}`}
@@ -29,19 +37,19 @@ export default function TierCard({ tierId, meta, candidates }: TierCardProps) {
             )}
           </div>
           <span className="flex-shrink-0 text-xs text-neutral-6 font-mono whitespace-nowrap">
-            {candidates.length} candidate{candidates.length !== 1 ? "s" : ""}
+            {ranked.length} candidate{ranked.length !== 1 ? "s" : ""}
           </span>
         </div>
       </div>
 
       {/* Card body */}
       <div>
-        {candidates.length === 0 ? (
+        {ranked.length === 0 ? (
           <p className="px-5 py-4 text-sm text-neutral-6">
             No scored candidates
           </p>
         ) : (
-          <Scorecard tierId={tierId} candidates={candidates} />
+          <Scorecard tierId={tierId} candidates={ranked} />
         )}
       </div>
     </div>
