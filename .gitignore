@@ -6,6 +6,11 @@ blob-report/
 playwright/.cache/
 testrail-run-url.txt
 
+# Local seed DB built by scripts/seed_dev_runs.py and baseline-matrix.yml.
+# The dev environment's source of truth is the seed blob in Azure Storage;
+# the file under data/ is a working copy, not version-controlled state.
+data/
+
 # Python
 __pycache__/
 *.pyc
