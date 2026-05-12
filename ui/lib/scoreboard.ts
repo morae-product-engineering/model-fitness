@@ -120,3 +120,76 @@ export function parseScoreboard(raw: WireScoreboard): Scoreboard {
     })),
   };
 }
+
+// ---------------------------------------------------------------------------
+// Trends wire / parsed types — companion to the trends endpoint (MLI-184).
+// ---------------------------------------------------------------------------
+
+export interface WireTrendRun {
+  run_id: string;
+  rubric_version: string;
+  started_at: string;
+  completed_at: string | null;
+}
+
+export interface WireTrendPoint {
+  run_id: string;
+  weighted_score: string;
+}
+
+export interface WireTrendCandidate {
+  candidate_id: string;
+  display_name: string;
+  family: Family;
+  deployment: string;
+  status: Status;
+  points: WireTrendPoint[];
+}
+
+export interface WireTrends {
+  product: string;
+  tier_id: TierId;
+  runs: WireTrendRun[];
+  candidates: WireTrendCandidate[];
+}
+
+export interface TrendRun {
+  run_id: string;
+  rubric_version: string;
+  started_at: string;
+  completed_at: string | null;
+}
+
+export interface TrendPoint {
+  run_id: string;
+  weighted_score: number;
+}
+
+export interface TrendCandidate {
+  candidate_id: string;
+  display_name: string;
+  family: Family;
+  deployment: string;
+  status: Status;
+  points: TrendPoint[];
+}
+
+export interface Trends {
+  product: string;
+  tier_id: TierId;
+  runs: TrendRun[];
+  candidates: TrendCandidate[];
+}
+
+export function parseTrends(raw: WireTrends): Trends {
+  return {
+    ...raw,
+    candidates: raw.candidates.map((wc) => ({
+      ...wc,
+      points: wc.points.map((p) => ({
+        run_id: p.run_id,
+        weighted_score: parseFloat(p.weighted_score),
+      })),
+    })),
+  };
+}
