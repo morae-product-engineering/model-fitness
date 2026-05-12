@@ -105,6 +105,12 @@ export default async function ScoreboardPage({ searchParams }: PageProps) {
     scoreboard.tiers.map((t) => [t.tier_id, t.candidates])
   );
 
+  // Browser-reachable API URL for client-side fetches (candidate-detail
+  // drill-down, MLI-187). NEXT_PUBLIC_API_URL is inlined at build time, so
+  // this resolves the same way client and server.
+  const clientApiBaseUrl =
+    process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+
   // Parallel fetch one trends payload per tier. Sibling server-side fetches
   // run concurrently; a failure on any one tier degrades to scorecard-only
   // (handled in TierCard via the optional `trends` prop).
@@ -153,6 +159,8 @@ export default async function ScoreboardPage({ searchParams }: PageProps) {
               meta={TIERS[tierId]}
               candidates={candidatesByTier[tierId] ?? []}
               trends={trendsByTier[tierId] ?? undefined}
+              product={product}
+              apiBaseUrl={clientApiBaseUrl}
             />
           ))}
         </div>

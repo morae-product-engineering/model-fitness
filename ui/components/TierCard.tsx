@@ -10,9 +10,21 @@ interface TierCardProps {
   meta: TierMeta;
   candidates: Candidate[];
   trends?: Trends;
+  // Threaded to the Scorecard so a row click can open the candidate-detail
+  // modal (MLI-187). When omitted, rows render without drill-down — handy
+  // for unit tests that exercise the table alone.
+  product?: string;
+  apiBaseUrl?: string;
 }
 
-export default function TierCard({ tierId, meta, candidates, trends }: TierCardProps) {
+export default function TierCard({
+  tierId,
+  meta,
+  candidates,
+  trends,
+  product,
+  apiBaseUrl,
+}: TierCardProps) {
   // Defensive: the scoreboard endpoint already sorts by weighted_score desc
   // (mmfp/models/matrix_run.py:186), but TierCard owns its render order so a
   // future caller passing an arbitrary Candidate[] still gets a ranked view.
@@ -51,7 +63,12 @@ export default function TierCard({ tierId, meta, candidates, trends }: TierCardP
             No scored candidates
           </p>
         ) : (
-          <Scorecard tierId={tierId} candidates={ranked} />
+          <Scorecard
+            tierId={tierId}
+            candidates={ranked}
+            product={product}
+            apiBaseUrl={apiBaseUrl}
+          />
         )}
       </div>
 
