@@ -1,16 +1,18 @@
 // Server component — renders one tier panel with its candidate scorecard.
 // Props are the parsed types from ui/lib/scoreboard.ts; no parseFloat here.
 
-import { Candidate, TierId, TierMeta } from "@/lib/scoreboard";
+import { Candidate, TierId, TierMeta, Trends } from "@/lib/scoreboard";
 import Scorecard from "./Scorecard";
+import TrendStrip from "./TrendStrip";
 
 interface TierCardProps {
   tierId: TierId;
   meta: TierMeta;
   candidates: Candidate[];
+  trends?: Trends;
 }
 
-export default function TierCard({ tierId, meta, candidates }: TierCardProps) {
+export default function TierCard({ tierId, meta, candidates, trends }: TierCardProps) {
   // Defensive: the scoreboard endpoint already sorts by weighted_score desc
   // (mmfp/models/matrix_run.py:186), but TierCard owns its render order so a
   // future caller passing an arbitrary Candidate[] still gets a ranked view.
@@ -52,6 +54,33 @@ export default function TierCard({ tierId, meta, candidates }: TierCardProps) {
           <Scorecard tierId={tierId} candidates={ranked} />
         )}
       </div>
+
+      {/* Trend strip — only when trends are available for this tier. The
+          page may omit `trends` if the trends endpoint failed; the scorecard
+          still renders without it. */}
+      {trends && (
+        <TrendStrip
+          tierId={tierId}
+          runs={trends.runs}
+          candidates={rankTrendCandidates(ranked, trends.candidates)}
+        />
+      )}
     </div>
   );
+}
+
+// TierCard owns the ranking contract (MLI-185 trail). Re-project the trends
+// candidates into the same order as the ranked scoreboard candidates so the
+// TrendStrip renders top-down in score order. Candidates present in the
+// scoreboard but missing from trends (no data in the window) are dropped from
+// the strip — the trends endpoint already omits them server-side.
+function rankTrendCandidates(
+  ranked: Candidate[],
+  trendCandidates: Trends["candidates"],
+): Trends["candidates"] {
+  const byId = new Map(trendCandidates.map((c) => [c.candidate_id, c]));
+  return ranked.flatMap((c) => {
+    const t = byId.get(c.candidate_id);
+    return t ? [t] : [];
+  });
 }

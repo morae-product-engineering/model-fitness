@@ -1,23 +1,35 @@
 // Async server component — fetches the live scoreboard API and renders tier cards.
 // ASSUMES: NEXT_PUBLIC_API_URL is set; falls back to localhost:8000 for local dev.
 
-import { parseScoreboard, TIERS, WireScoreboard, TierId } from "@/lib/scoreboard";
+import {
+  parseScoreboard,
+  parseTrends,
+  TIERS,
+  Trends,
+  WireScoreboard,
+  WireTrends,
+  TierId,
+} from "@/lib/scoreboard";
 import TierCard from "@/components/TierCard";
 
 // The three tier IDs in the order the API always returns them.
 const TIER_ORDER: TierId[] = ["tier_1", "tier_2", "tier_3"];
 
+// Hardcoded for MLI-186 — configurable run-count is explicitly out of scope.
+const TREND_RUNS = 10;
+
 type FetchResult =
   | { ok: true; data: WireScoreboard }
   | { ok: false; error: string };
 
-async function fetchScoreboard(product: string): Promise<FetchResult> {
-  const apiUrl =
-    process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+function apiBaseUrl(): string {
+  return process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+}
 
+async function fetchScoreboard(product: string): Promise<FetchResult> {
   try {
     const res = await fetch(
-      `${apiUrl}/api/products/${encodeURIComponent(product)}/scoreboard`,
+      `${apiBaseUrl()}/api/products/${encodeURIComponent(product)}/scoreboard`,
       { cache: "no-store" }
     );
 
@@ -39,6 +51,29 @@ async function fetchScoreboard(product: string): Promise<FetchResult> {
     const message =
       err instanceof Error ? err.message : "Unknown network error";
     return { ok: false, error: `API not reachable: ${message}` };
+  }
+}
+
+// Best-effort trends fetch — a missing or failing trends response degrades to
+// the scorecard alone rather than failing the page. The trends endpoint also
+// 404s when no runs have ever been recorded (already a scoreboard-page error)
+// so missing data here is benign in practice.
+async function fetchTrends(
+  product: string,
+  tier: TierId,
+): Promise<Trends | null> {
+  try {
+    const res = await fetch(
+      `${apiBaseUrl()}/api/products/${encodeURIComponent(
+        product,
+      )}/trends?tier=${tier}&runs=${TREND_RUNS}`,
+      { cache: "no-store" },
+    );
+    if (!res.ok) return null;
+    const data: WireTrends = await res.json();
+    return parseTrends(data);
+  } catch {
+    return null;
   }
 }
 
@@ -69,6 +104,18 @@ export default async function ScoreboardPage({ searchParams }: PageProps) {
   const candidatesByTier = Object.fromEntries(
     scoreboard.tiers.map((t) => [t.tier_id, t.candidates])
   );
+
+  // Parallel fetch one trends payload per tier. Sibling server-side fetches
+  // run concurrently; a failure on any one tier degrades to scorecard-only
+  // (handled in TierCard via the optional `trends` prop).
+  const trendsByTier = Object.fromEntries(
+    await Promise.all(
+      TIER_ORDER.map(async (tierId) => [
+        tierId,
+        await fetchTrends(product, tierId),
+      ] as const),
+    ),
+  ) as Record<TierId, Trends | null>;
 
   return (
     <main className="min-h-screen bg-neutral-13 p-8">
@@ -105,6 +152,7 @@ export default async function ScoreboardPage({ searchParams }: PageProps) {
               tierId={tierId}
               meta={TIERS[tierId]}
               candidates={candidatesByTier[tierId] ?? []}
+              trends={trendsByTier[tierId] ?? undefined}
             />
           ))}
         </div>
