@@ -1,15 +1,35 @@
-// Server component — renders a table of candidates for one tier.
+"use client";
+
+// Client component — renders a table of candidates for one tier. Client-side
+// because rows are clickable: clicking a row opens the candidate-detail
+// drill-down modal (MLI-187). The table itself is otherwise static.
+//
 // Dimension columns are derived from the first candidate's per_dimension keys
 // so the table adapts when the rubric changes (architectural decision 7).
+//
+// `product` + `apiBaseUrl` are optional. When omitted (e.g. in component-only
+// unit tests for the table itself), rows are still rendered but clicks no-op
+// — the drill-down requires both to construct the candidate-detail URL.
 
+import { useState } from "react";
 import { Candidate, Family, STATUS_LABELS, TierId } from "@/lib/scoreboard";
+import CandidateDetail from "./CandidateDetail";
 
 interface ScorecardProps {
   tierId: TierId;
   candidates: Candidate[];
+  product?: string;
+  apiBaseUrl?: string;
 }
 
-export default function Scorecard({ tierId, candidates }: ScorecardProps) {
+export default function Scorecard({
+  tierId,
+  candidates,
+  product,
+  apiBaseUrl,
+}: ScorecardProps) {
+  const [selected, setSelected] = useState<Candidate | null>(null);
+  const drillDownEnabled = Boolean(product && apiBaseUrl);
   if (candidates.length === 0) {
     return null;
   }
@@ -41,7 +61,26 @@ export default function Scorecard({ tierId, candidates }: ScorecardProps) {
             <tr
               key={c.candidate_id}
               data-testid={`tier-${tierId}-candidate`}
-              className="border-b border-neutral-11 last:border-0"
+              role={drillDownEnabled ? "button" : undefined}
+              tabIndex={drillDownEnabled ? 0 : undefined}
+              onClick={
+                drillDownEnabled ? () => setSelected(c) : undefined
+              }
+              onKeyDown={
+                drillDownEnabled
+                  ? (e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setSelected(c);
+                      }
+                    }
+                  : undefined
+              }
+              className={`border-b border-neutral-11 last:border-0 ${
+                drillDownEnabled
+                  ? "cursor-pointer hover:bg-neutral-13 focus:bg-neutral-13 focus:outline-none"
+                  : ""
+              }`}
             >
               <td className="px-3 py-2 text-center font-mono text-neutral-6">
                 {i + 1}
@@ -88,6 +127,17 @@ export default function Scorecard({ tierId, candidates }: ScorecardProps) {
           ))}
         </tbody>
       </table>
+      {selected && product && apiBaseUrl && (
+        <CandidateDetail
+          product={product}
+          deployment={selected.deployment}
+          displayName={selected.display_name}
+          family={selected.family}
+          tierId={tierId}
+          apiBaseUrl={apiBaseUrl}
+          onClose={() => setSelected(null)}
+        />
+      )}
     </div>
   );
 }

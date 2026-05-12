@@ -193,3 +193,98 @@ export function parseTrends(raw: WireTrends): Trends {
     })),
   };
 }
+
+// ---------------------------------------------------------------------------
+// Candidate detail wire / parsed types — companion to the candidate-detail
+// endpoint (MLI-184).
+// ---------------------------------------------------------------------------
+
+export interface WireCandidateTierResult {
+  tier_id: TierId;
+  weighted_score: string;
+  per_dimension: Record<string, string>;
+}
+
+export interface WireCandidateLatestRun {
+  run_id: string;
+  rubric_version: string;
+  started_at: string;
+  completed_at: string | null;
+  per_tier: WireCandidateTierResult[];
+}
+
+export interface WireCandidateHistoryEntry {
+  run_id: string;
+  started_at: string;
+  completed_at: string | null;
+  per_tier_scores: Record<string, string>;
+}
+
+export interface WireCandidateDetail {
+  product: string;
+  candidate_id: string;
+  display_name: string;
+  family: Family;
+  deployment: string;
+  status: Status;
+  tiers: TierId[];
+  latest_run: WireCandidateLatestRun | null;
+  history: WireCandidateHistoryEntry[];
+}
+
+export interface CandidateTierResult {
+  tier_id: TierId;
+  weighted_score: number;
+  per_dimension: Record<string, number>;
+}
+
+export interface CandidateLatestRun {
+  run_id: string;
+  rubric_version: string;
+  started_at: string;
+  completed_at: string | null;
+  per_tier: CandidateTierResult[];
+}
+
+export interface CandidateHistoryEntry {
+  run_id: string;
+  started_at: string;
+  completed_at: string | null;
+  per_tier_scores: Partial<Record<TierId, number>>;
+}
+
+export interface CandidateDetail {
+  product: string;
+  candidate_id: string;
+  display_name: string;
+  family: Family;
+  deployment: string;
+  status: Status;
+  tiers: TierId[];
+  latest_run: CandidateLatestRun | null;
+  history: CandidateHistoryEntry[];
+}
+
+export function parseCandidateDetail(raw: WireCandidateDetail): CandidateDetail {
+  return {
+    ...raw,
+    latest_run: raw.latest_run
+      ? {
+          ...raw.latest_run,
+          per_tier: raw.latest_run.per_tier.map((pt) => ({
+            tier_id: pt.tier_id,
+            weighted_score: parseFloat(pt.weighted_score),
+            per_dimension: Object.fromEntries(
+              Object.entries(pt.per_dimension).map(([k, v]) => [k, parseFloat(v)]),
+            ),
+          })),
+        }
+      : null,
+    history: raw.history.map((h) => ({
+      ...h,
+      per_tier_scores: Object.fromEntries(
+        Object.entries(h.per_tier_scores).map(([k, v]) => [k, parseFloat(v)]),
+      ) as Partial<Record<TierId, number>>,
+    })),
+  };
+}

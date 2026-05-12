@@ -10,8 +10,8 @@
 //   - MLI-185: score-descending render order incl. all-equal stability,
 //     and FamilyDot family-icon presence per candidate.
 
-import { describe, it, expect } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { describe, it, expect, afterEach, vi } from 'vitest';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import TierCard from '../../ui/components/TierCard';
 import Scorecard from '../../ui/components/Scorecard';
 import { TIERS, Candidate, TierId } from '../../ui/lib/scoreboard';
@@ -232,6 +232,59 @@ describe('Scorecard', () => {
       render(<Scorecard tierId={TIER_1} candidates={candidates} />);
       expect(screen.getAllByTestId('family-icon-chat')).toHaveLength(2);
       expect(screen.getAllByTestId('family-icon-reasoning')).toHaveLength(1);
+    });
+  });
+
+  // MLI-187 — row click opens the candidate-detail drill-down
+  describe('drill-down', () => {
+    afterEach(() => {
+      vi.unstubAllGlobals();
+      vi.restoreAllMocks();
+    });
+
+    it('rows are not clickable when product/apiBaseUrl are omitted', () => {
+      render(<Scorecard tierId={TIER_1} candidates={[makeCandidate()]} />);
+      const row = screen.getByTestId('tier-tier_1-candidate');
+      // No role=button → static row, no click affordance.
+      expect(row.getAttribute('role')).toBeNull();
+      fireEvent.click(row);
+      expect(screen.queryByTestId('candidate-detail-overlay')).not.toBeInTheDocument();
+    });
+
+    it('opens the candidate-detail modal when a row is clicked', async () => {
+      // Stub fetch so the opened modal can resolve without a real network call.
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(
+          async () =>
+            new Response(
+              JSON.stringify({
+                product: 'mli',
+                candidate_id: 'gpt-4o',
+                display_name: 'GPT-4o',
+                family: 'chat',
+                deployment: 'azure-gpt-4o',
+                status: 'under_evaluation',
+                tiers: ['tier_1'],
+                latest_run: null,
+                history: [],
+              }),
+              { status: 200 },
+            ),
+        ),
+      );
+      render(
+        <Scorecard
+          tierId={TIER_1}
+          candidates={[makeCandidate()]}
+          product="mli"
+          apiBaseUrl="http://api.test"
+        />,
+      );
+      const row = screen.getByTestId('tier-tier_1-candidate');
+      expect(row.getAttribute('role')).toBe('button');
+      fireEvent.click(row);
+      expect(screen.getByTestId('candidate-detail-overlay')).toBeInTheDocument();
     });
   });
 });

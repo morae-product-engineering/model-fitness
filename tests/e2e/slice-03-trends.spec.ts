@@ -1,10 +1,17 @@
 // @jira: MLI-181
-// Slice 3 acceptance test. Currently expected to fail — trend strip +
-// candidate-detail drill-in UI does not yet exist. Will go green once Slice 3 implementation sub-tasks land.
+// Slice 3 acceptance test. Goes green with MLI-187 (drill-down) — the trend
+// strip (MLI-186) and ranked candidates (MLI-185) already land it on
+// everything but the dimension drill-in.
 //
-// MLI-185: count updated from 2 → 4 for tier_3. Resolved on MLI-180 (2026-05-12):
+// MLI-185: tier_3 candidate count 2 → 4. Resolved on MLI-180 (2026-05-12):
 // option (a) — the test matches the slate, not the other way round. The slate
 // (products/mli/candidates.yaml) is canonical; this number is a snapshot of it.
+//
+// MLI-187: tier_3 dimension count 7 → 2, same pattern — the rubric
+// (products/mli/rubric.yaml) is canonical and declares 2 deterministic
+// dimensions for tier_3 in v0.1 (citation_presence, structural_completeness).
+// The LLM-judge dimensions land with Slice 6 (MLI-219+); revise upward when
+// the rubric grows.
 import { test, expect } from '@playwright/test';
 
 test('scoreboard shows ranked candidates with trend data', async ({ page }) => {
@@ -21,5 +28,5 @@ test('scoreboard shows ranked candidates with trend data', async ({ page }) => {
 
   await t3Candidates.first().click();
   await expect(page.getByTestId('candidate-detail-dimensions')).toBeVisible();
-  await expect(page.getByTestId('dimension-row')).toHaveCount(7);
+  await expect(page.getByTestId('dimension-row')).toHaveCount(2);
 });
