@@ -2,7 +2,7 @@
 // Dimension columns are derived from the first candidate's per_dimension keys
 // so the table adapts when the rubric changes (architectural decision 7).
 
-import { Candidate, STATUS_LABELS, TierId } from "@/lib/scoreboard";
+import { Candidate, Family, STATUS_LABELS, TierId } from "@/lib/scoreboard";
 
 interface ScorecardProps {
   tierId: TierId;
@@ -55,7 +55,11 @@ export default function Scorecard({ tierId, candidates }: ScorecardProps) {
                 )}
               </td>
               <td className="px-3 py-2 text-center">
-                <span className="inline-block text-xs font-semibold uppercase tracking-wide bg-neutral-12 text-neutral-5 rounded px-1.5 py-0.5">
+                <span
+                  data-testid={`family-icon-${c.family}`}
+                  className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide bg-neutral-12 text-neutral-5 rounded px-1.5 py-0.5"
+                >
+                  <FamilyDot family={c.family} />
                   {c.family}
                 </span>
               </td>
@@ -85,6 +89,22 @@ export default function Scorecard({ tierId, candidates }: ScorecardProps) {
         </tbody>
       </table>
     </div>
+  );
+}
+
+// Small coloured dot indicating model family (chat / reasoning). Reasoning
+// gets the orange accent so the rarer family is the one that pops; chat uses
+// neutral-4. Title attribute provides the label for accessibility.
+function FamilyDot({ family }: { family: Family }) {
+  const cls =
+    family === "reasoning" ? "bg-orange" : "bg-neutral-5";
+  const label = family === "reasoning" ? "Reasoning" : "Chat";
+  return (
+    <span
+      title={label}
+      aria-label={label}
+      className={`inline-block w-1.5 h-1.5 rounded-full ${cls}`}
+    />
   );
 }
 

@@ -1,12 +1,14 @@
-// Unit tests for TierCard and Scorecard components (MLI-175).
+// Unit tests for TierCard and Scorecard components (MLI-175, extended in MLI-185).
 //
 // These components are synchronous server components — no React hooks, no
 // client-side state. RTL renders them directly without async wrappers.
 //
 // What we exercise:
-//   - Testids required by the slice-02 Playwright acceptance test
+//   - Testids required by the slice-02/slice-03 Playwright acceptance tests
 //   - Human-readable text the acceptance test or rubric contract expects
 //   - Edge cases: empty candidates, (unknown) deployment badge, Tier 3 note
+//   - MLI-185: score-descending render order incl. all-equal stability,
+//     and FamilyDot family-icon presence per candidate.
 
 import { describe, it, expect } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
@@ -90,6 +92,61 @@ describe('TierCard', () => {
     // TIERS[tier_1].note is undefined; we verify no synthesis note leaks in.
     expect(screen.queryByText(/v0\.1 — deterministic/)).not.toBeInTheDocument();
   });
+
+  // MLI-185 — ranked candidates per tier
+  describe('ranked render order', () => {
+    it('renders the single candidate when slate has one entry', () => {
+      render(
+        <TierCard
+          tierId={TIER_1}
+          meta={TIERS[TIER_1]}
+          candidates={[makeCandidate({ candidate_id: 'solo', display_name: 'Solo' })]}
+        />
+      );
+      const rows = screen.getAllByTestId('tier-tier_1-candidate');
+      expect(rows).toHaveLength(1);
+      expect(within(rows[0]!).getByText('Solo')).toBeInTheDocument();
+    });
+
+    it('renders multiple candidates in score-descending order regardless of input order', () => {
+      // Deliberately scrambled input order — the component must rank.
+      const candidates = [
+        makeCandidate({ candidate_id: 'mid', display_name: 'Mid', weighted_score: 70.0 }),
+        makeCandidate({ candidate_id: 'top', display_name: 'Top', weighted_score: 90.0 }),
+        makeCandidate({ candidate_id: 'low', display_name: 'Low', weighted_score: 50.0 }),
+      ];
+      render(
+        <TierCard tierId={TIER_1} meta={TIERS[TIER_1]} candidates={candidates} />
+      );
+      const rows = screen.getAllByTestId('tier-tier_1-candidate');
+      expect(rows).toHaveLength(3);
+      expect(within(rows[0]!).getByTestId('candidate-score')).toHaveTextContent('90.0');
+      expect(within(rows[1]!).getByTestId('candidate-score')).toHaveTextContent('70.0');
+      expect(within(rows[2]!).getByTestId('candidate-score')).toHaveTextContent('50.0');
+    });
+
+    it('preserves input order for candidates with equal scores (stable sort)', () => {
+      const candidates = [
+        makeCandidate({ candidate_id: 'a', display_name: 'A', weighted_score: 80.0 }),
+        makeCandidate({ candidate_id: 'b', display_name: 'B', weighted_score: 80.0 }),
+        makeCandidate({ candidate_id: 'c', display_name: 'C', weighted_score: 80.0 }),
+      ];
+      render(
+        <TierCard tierId={TIER_1} meta={TIERS[TIER_1]} candidates={candidates} />
+      );
+      const rows = screen.getAllByTestId('tier-tier_1-candidate');
+      expect(within(rows[0]!).getByText('A')).toBeInTheDocument();
+      expect(within(rows[1]!).getByText('B')).toBeInTheDocument();
+      expect(within(rows[2]!).getByText('C')).toBeInTheDocument();
+    });
+
+    it('renders no candidate rows when the tier is empty', () => {
+      render(
+        <TierCard tierId={TIER_1} meta={TIERS[TIER_1]} candidates={[]} />
+      );
+      expect(screen.queryAllByTestId('tier-tier_1-candidate')).toHaveLength(0);
+    });
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -140,5 +197,41 @@ describe('Scorecard', () => {
   it('renders nothing when candidates array is empty', () => {
     const { container } = render(<Scorecard tierId={TIER_1} candidates={[]} />);
     expect(container.firstChild).toBeNull();
+  });
+
+  // MLI-185 — family icon per candidate
+  describe('family icon', () => {
+    it('renders the chat family icon for a chat candidate', () => {
+      render(
+        <Scorecard
+          tierId={TIER_1}
+          candidates={[makeCandidate({ family: 'chat' })]}
+        />
+      );
+      const row = screen.getByTestId('tier-tier_1-candidate');
+      expect(within(row).getByTestId('family-icon-chat')).toBeInTheDocument();
+    });
+
+    it('renders the reasoning family icon for a reasoning candidate', () => {
+      render(
+        <Scorecard
+          tierId={TIER_1}
+          candidates={[makeCandidate({ family: 'reasoning' })]}
+        />
+      );
+      const row = screen.getByTestId('tier-tier_1-candidate');
+      expect(within(row).getByTestId('family-icon-reasoning')).toBeInTheDocument();
+    });
+
+    it('renders one family icon per candidate when the tier has many', () => {
+      const candidates = [
+        makeCandidate({ candidate_id: 'a', family: 'chat' }),
+        makeCandidate({ candidate_id: 'b', family: 'reasoning' }),
+        makeCandidate({ candidate_id: 'c', family: 'chat' }),
+      ];
+      render(<Scorecard tierId={TIER_1} candidates={candidates} />);
+      expect(screen.getAllByTestId('family-icon-chat')).toHaveLength(2);
+      expect(screen.getAllByTestId('family-icon-reasoning')).toHaveLength(1);
+    });
   });
 });
