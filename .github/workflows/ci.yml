@@ -332,6 +332,20 @@ jobs:
             --query 'properties.configuration.ingress.fqdn' -o tsv)
           echo "mmfp_url=https://${UI_FQDN}" >> "$GITHUB_OUTPUT"
 
+      # MLI-261: tell the API which UI origin to allow for browser-issued
+      # fetches (candidate-detail drill-down is client-side; without this the
+      # browser blocks the response). Done after the UI deploys so the FQDN is
+      # known. A no-op revision is created only when the env var actually
+      # changes — Container Apps deduplicates identical configurations.
+      - name: Configure API CORS Allowed Origins
+        run: |
+          set -euo pipefail
+          UI_URL='${{ steps.deploy_ui.outputs.mmfp_url }}'
+          az containerapp update \
+            --name "${API_APP}" \
+            --resource-group "${RG}" \
+            --set-env-vars "MMFP_CORS_ALLOWED_ORIGINS=${UI_URL}"
+
       - name: Write Deploy Summary
         run: |
           {

@@ -6,15 +6,31 @@ MLI-174: scoreboard router mounted here; see mmfp/api/scoreboard.py.
 MLI-177: on startup, optionally download a seed SQLite from blob storage
 into MMFP_DB_PATH so the deployed dev environment shows the latest
 baseline-matrix run. Non-fatal — see mmfp/api/seed.py.
+MLI-261: CORS middleware reads MMFP_CORS_ALLOWED_ORIGINS (comma-separated).
+Browser-issued client fetches (e.g. CandidateDetail drill-down) cross
+origins between the UI and API Container Apps; the deployed dev
+environment was blocking those without this configured.
 """
 
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from mmfp.api import candidate_detail, scoreboard, trends
 from mmfp.api.seed import download_seed_if_configured
+
+CORS_ORIGINS_ENV = "MMFP_CORS_ALLOWED_ORIGINS"
+# Local dev default: Next.js dev server. Deployed environments override via
+# MMFP_CORS_ALLOWED_ORIGINS with their actual UI Container App URL.
+_DEFAULT_LOCAL_ORIGIN = "http://localhost:3000"
+
+
+def _parse_allowed_origins(env_value: str) -> list[str]:
+    """Comma-separated origins → list. Strips whitespace; drops empties."""
+    return [o.strip() for o in env_value.split(",") if o.strip()]
 
 
 @asynccontextmanager
@@ -32,6 +48,19 @@ app = FastAPI(
     description="Morae Model Fitness Platform API",
     version="0.0.1",
     lifespan=lifespan,
+)
+
+# CORS: read once at import. No credentials — UI fetches are anonymous; the
+# UI's Basic Auth gate lives on its own Container App and doesn't propagate
+# Authorization to the API.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_parse_allowed_origins(
+        os.environ.get(CORS_ORIGINS_ENV, _DEFAULT_LOCAL_ORIGIN)
+    ),
+    allow_credentials=False,
+    allow_methods=["GET", "OPTIONS"],
+    allow_headers=["*"],
 )
 
 
