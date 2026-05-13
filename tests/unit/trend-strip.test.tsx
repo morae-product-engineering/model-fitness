@@ -1,11 +1,14 @@
-// Unit tests for TrendStrip (MLI-186).
+// Unit tests for TrendStrip (MLI-186, updated MLI-264).
 //
 // What we exercise:
 //   - testid required by the slice-03 Playwright acceptance test
 //   - Empty / single-run state copy
 //   - Multi-run rendering produces one polyline per candidate, in input order
-//   - Hover surfaces the completed_at timestamp + score in the tooltip
+//   - Hover surfaces the completed_at timestamp + score in the tooltip (3-line)
 //   - Family-based stroke colour (orange = reasoning, neutral-5 = chat)
+//   - Y-axis reference labels at 0, 50, 100
+//   - X-axis date ticks — one per run
+//   - Family legend shows entries for families present in the data
 
 import { describe, it, expect } from 'vitest';
 import { fireEvent, render, screen, within } from '@testing-library/react';
@@ -128,9 +131,71 @@ describe('TrendStrip', () => {
 
     const tooltip = screen.getByTestId('tier-tier_1-trend-tooltip');
     expect(within(tooltip).getByText('A')).toBeInTheDocument();
-    // The score is formatted to 1dp; the timestamp uses toLocaleDateString
-    // which is locale-dependent — assert the score+separator survives without
-    // pinning the exact date string.
+    // Score is on its own line now (3-line tooltip: name / date / score).
+    // The timestamp uses toLocaleDateString which is locale-dependent —
+    // assert the score value survives without pinning the exact date string.
     expect(tooltip.textContent).toContain('72.5');
+  });
+
+  it('renders x-axis tick elements — one per run', () => {
+    const runs = [run('r3', 0), run('r2', 7), run('r1', 14)];
+    const candidates = [
+      cand('a', 'chat', [
+        { run_id: 'r1', weighted_score: 70 },
+        { run_id: 'r2', weighted_score: 75 },
+        { run_id: 'r3', weighted_score: 80 },
+      ]),
+    ];
+    const { container } = render(
+      <TrendStrip tierId="tier_1" runs={runs} candidates={candidates} />,
+    );
+    // Three runs → three x-tick groups. Assert by count, not by exact date
+    // string, since toLocaleDateString is locale-dependent.
+    const ticks = container.querySelectorAll('[data-testid="trend-x-tick"]');
+    expect(ticks).toHaveLength(3);
+  });
+
+  it('renders y-axis labels at 0, 50, and 100', () => {
+    const runs = [run('r2', 0), run('r1', 7)];
+    const candidates = [
+      cand('a', 'chat', [
+        { run_id: 'r1', weighted_score: 60 },
+        { run_id: 'r2', weighted_score: 80 },
+      ]),
+    ];
+    render(<TrendStrip tierId="tier_1" runs={runs} candidates={candidates} />);
+    expect(screen.getByText('0')).toBeInTheDocument();
+    expect(screen.getByText('50')).toBeInTheDocument();
+    expect(screen.getByText('100')).toBeInTheDocument();
+  });
+
+  it('renders a legend with both families when both are present', () => {
+    const runs = [run('r2', 0), run('r1', 7)];
+    const candidates = [
+      cand('reasoner', 'reasoning', [
+        { run_id: 'r1', weighted_score: 60 },
+        { run_id: 'r2', weighted_score: 70 },
+      ]),
+      cand('chatter', 'chat', [
+        { run_id: 'r1', weighted_score: 40 },
+        { run_id: 'r2', weighted_score: 50 },
+      ]),
+    ];
+    render(<TrendStrip tierId="tier_1" runs={runs} candidates={candidates} />);
+    expect(screen.getByText('Reasoning')).toBeInTheDocument();
+    expect(screen.getByText('Chat')).toBeInTheDocument();
+  });
+
+  it('renders legend with only Chat when no reasoning candidates are present', () => {
+    const runs = [run('r2', 0), run('r1', 7)];
+    const candidates = [
+      cand('chatter', 'chat', [
+        { run_id: 'r1', weighted_score: 40 },
+        { run_id: 'r2', weighted_score: 50 },
+      ]),
+    ];
+    render(<TrendStrip tierId="tier_1" runs={runs} candidates={candidates} />);
+    expect(screen.getByText('Chat')).toBeInTheDocument();
+    expect(screen.queryByText('Reasoning')).toBeNull();
   });
 });
