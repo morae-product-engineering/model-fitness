@@ -2,6 +2,7 @@
 // Props are the parsed types from ui/lib/scoreboard.ts; no parseFloat here.
 
 import { Candidate, TierId, TierMeta, Trends } from "@/lib/scoreboard";
+import PortfolioSummary from "./PortfolioSummary";
 import Scorecard from "./Scorecard";
 import TrendStrip from "./TrendStrip";
 
@@ -55,6 +56,16 @@ export default function TierCard({
           </span>
         </div>
       </div>
+
+      {/* Portfolio summary — Primary / Fallback / Under evaluation / Rejected
+          four-cell row above the candidate table (MLI-263, audit Option C). */}
+      {ranked.length > 0 && (
+        <PortfolioSummary
+          tierId={tierId}
+          candidates={ranked}
+          trends={trends}
+        />
+      )}
 
       {/* Card body */}
       <div>
