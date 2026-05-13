@@ -4,15 +4,11 @@
 
 export default function ScoreboardLoading() {
   return (
-    <main className="min-h-screen bg-neutral-13 p-8">
+    <div
+      className="min-h-screen p-8"
+      style={{ background: "var(--neutral-13)" }}
+    >
       <div className="max-w-5xl mx-auto">
-        {/* Header placeholder */}
-        <div className="mb-6">
-          <div className="h-3 w-24 bg-neutral-11 rounded animate-pulse mb-2" />
-          <div className="h-6 w-56 bg-neutral-11 rounded animate-pulse mb-1" />
-          <div className="h-3 w-80 bg-neutral-11 rounded animate-pulse" />
-        </div>
-
         {/* Three tier card placeholders */}
         <div className="flex flex-col gap-4">
           {[0, 1, 2].map((i) => (
@@ -30,6 +26,6 @@ export default function ScoreboardLoading() {
           ))}
         </div>
       </div>
-    </main>
+    </div>
   );
 }
