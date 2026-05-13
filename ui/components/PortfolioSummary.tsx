@@ -11,6 +11,7 @@
 
 import { Candidate, TierId, Trends } from "@/lib/scoreboard";
 import Delta from "./primitives/Delta";
+import Spark from "./primitives/Spark";
 
 interface PortfolioSummaryProps {
   tierId: TierId;
@@ -69,10 +70,8 @@ export default function PortfolioSummary({
 }
 
 // — Primary / Fallback cell — lifted from PortfolioSlot in
-// ui/prototype/scoreboard.jsx:128-159. The prototype renders a Spark inside
-// the slot; trend-strip polish is owned by MLI-264, so the score delta is
-// included here (cheap, uses already-fetched trends data) but the inline
-// sparkline is deferred to that ticket.
+// ui/prototype/scoreboard.jsx:128-159. Renders score, inline Spark, and Delta
+// (the prototype trio at :149-156).
 function PortfolioSlot({
   tierId,
   kind,
@@ -104,6 +103,9 @@ function PortfolioSlot({
     );
   }
   const delta = computeScoreDelta(candidate.candidate_id, trends);
+  const sparkData = computeSparkData(candidate.candidate_id, trends);
+  const sparkStroke =
+    candidate.family === "reasoning" ? "var(--orange)" : "var(--neutral-5)";
   return (
     <div
       data-testid={testid}
@@ -129,6 +131,7 @@ function PortfolioSlot({
         >
           {candidate.weighted_score.toFixed(1)}
         </span>
+        <Spark data={sparkData} stroke={sparkStroke} w={70} h={24} />
         <Delta value={delta} />
       </div>
     </div>
@@ -183,6 +186,19 @@ function renderEvalDetail(evals: Candidate[]): string {
   const named = evals.slice(0, 2).map((c) => c.display_name);
   const overflow = evals.length > 2 ? `, +${evals.length - 2}` : "";
   return named.join(", ") + overflow;
+}
+
+// Pull all weighted_score values for a candidate's trend series.
+// Returns an empty array when the candidate is absent or has no points;
+// Spark renders an empty SVG in that case.
+function computeSparkData(
+  candidateId: string,
+  trends: Trends | undefined,
+): number[] {
+  if (!trends) return [];
+  const series = trends.candidates.find((c) => c.candidate_id === candidateId);
+  if (!series) return [];
+  return series.points.map((p) => p.weighted_score);
 }
 
 // Pull the candidate's last two trend points and return latest - previous.
