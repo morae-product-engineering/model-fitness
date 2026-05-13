@@ -10,7 +10,9 @@ import {
   WireTrends,
   TierId,
 } from "@/lib/scoreboard";
+import { resolveEnvLabel } from "@/lib/env";
 import TierCard from "@/components/TierCard";
+import AppShell from "@/components/AppShell";
 
 // The three tier IDs in the order the API always returns them.
 const TIER_ORDER: TierId[] = ["tier_1", "tier_2", "tier_3"];
@@ -83,18 +85,27 @@ interface PageProps {
 
 export default async function ScoreboardPage({ searchParams }: PageProps) {
   const product = searchParams.product ?? "mli";
+  const env = resolveEnvLabel();
+  const productMeta = { id: product, name: product.toUpperCase() };
   const result = await fetchScoreboard(product);
 
   if (!result.ok) {
     return (
-      <main className="min-h-screen bg-neutral-13 flex items-center justify-center p-8">
-        <div className="max-w-md w-full bg-white border border-neutral-11 rounded-lg p-6 shadow-sm">
-          <h1 className="text-lg font-semibold text-neutral-1 mb-2">
-            Model Fitness Scoreboard
-          </h1>
-          <p className="text-sm text-neutral-5">{result.error}</p>
+      <AppShell
+        env={env}
+        rubricVersion="—"
+        product={productMeta}
+        activeTab="scoreboard"
+      >
+        <div className="flex items-center justify-center p-8">
+          <div className="max-w-md w-full bg-white border border-neutral-11 rounded-lg p-6 shadow-sm">
+            <h1 className="text-lg font-semibold text-neutral-1 mb-2">
+              Model Fitness Scoreboard
+            </h1>
+            <p className="text-sm text-neutral-5">{result.error}</p>
+          </div>
         </div>
-      </main>
+      </AppShell>
     );
   }
 
@@ -124,47 +135,30 @@ export default async function ScoreboardPage({ searchParams }: PageProps) {
   ) as Record<TierId, Trends | null>;
 
   return (
-    <main className="min-h-screen bg-neutral-13 p-8">
-      <div className="max-w-5xl mx-auto">
-        {/* Page header */}
-        <div className="mb-6">
-          <p className="text-xs font-semibold text-neutral-6 uppercase tracking-wide mb-1">
-            Model Fitness · {product.toUpperCase()}
-          </p>
-          <h1 className="text-2xl font-semibold text-neutral-1 tracking-tight mb-1">
-            Scoreboard
-          </h1>
-          <p className="text-xs text-neutral-6 font-mono">
-            Run{" "}
-            <span className="text-neutral-3">{scoreboard.run_id}</span>
-            {" · "}
-            Rubric{" "}
-            <span data-testid="rubric-version" className="text-neutral-3">
-              {scoreboard.rubric_version}
-            </span>
-            {" · "}
-            Started{" "}
-            <span className="text-neutral-3">
-              {new Date(scoreboard.started_at).toLocaleString()}
-            </span>
-          </p>
-        </div>
-
-        {/* Tier cards */}
-        <div className="flex flex-col gap-4">
-          {TIER_ORDER.map((tierId) => (
-            <TierCard
-              key={tierId}
-              tierId={tierId}
-              meta={TIERS[tierId]}
-              candidates={candidatesByTier[tierId] ?? []}
-              trends={trendsByTier[tierId] ?? undefined}
-              product={product}
-              apiBaseUrl={clientApiBaseUrl}
-            />
-          ))}
+    <AppShell
+      env={env}
+      runId={scoreboard.run_id}
+      rubricVersion={scoreboard.rubric_version}
+      product={productMeta}
+      activeTab="scoreboard"
+    >
+      <div className="p-8">
+        <div className="max-w-5xl mx-auto">
+          <div className="flex flex-col gap-4">
+            {TIER_ORDER.map((tierId) => (
+              <TierCard
+                key={tierId}
+                tierId={tierId}
+                meta={TIERS[tierId]}
+                candidates={candidatesByTier[tierId] ?? []}
+                trends={trendsByTier[tierId] ?? undefined}
+                product={product}
+                apiBaseUrl={clientApiBaseUrl}
+              />
+            ))}
+          </div>
         </div>
       </div>
-    </main>
+    </AppShell>
   );
 }

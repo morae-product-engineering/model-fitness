@@ -2,10 +2,64 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Matches prototype token: --background / --foreground */
+/* Design tokens — inlined from ui/prototype/assets/colors_and_type.css.
+   The prototype README forbids importing from prototype/, so the values
+   are duplicated here as the production source of truth. Keep in sync
+   when tokens change; the prototype is the reference. */
 :root {
+  /* Brand warm spectrum */
+  --red:           #ff0000;
+  --red-orange:    #ff3600;
+  --orange:        #ff6900;
+  --yellow-orange: #ff9400;
+  --yellow:        #ffbd00;
+
+  /* Neutrals (1 = darkest, 13 = lightest) */
+  --neutral-1:  #0d0d0d;
+  --neutral-2:  #1a1a1a;
+  --neutral-3:  #262626;
+  --neutral-4:  #404040;
+  --neutral-5:  #595959;
+  --neutral-6:  #737373;
+  --neutral-7:  #7f7f7f;
+  --neutral-8:  #888888;
+  --neutral-9:  #a6a6a6;
+  --neutral-10: #d9d9d9;
+  --neutral-11: #e6e6e6;
+  --neutral-12: #f2f2f2;
+  --neutral-13: #f9f9f9;
+
+  /* Semantic accents */
+  --green:       #03a649;
+  --warm-yellow: #f7a604;
+  --warm-red:    #d93417;
+  --purple:      #9747ff;
+
+  /* Blues (info / data) */
+  --blue-1: #168fd5;
+  --blue-2: #086ba4;
+
+  /* Pale / tint palette (chip backgrounds) */
+  --light-blue:   #f0f9ff;
+  --light-yellow: #ffeecf;
+  --light-green:  #d7f4ea;
+  --light-red:    #ffddd8;
+  --light-purple: #eddeff;
+
+  /* Type families */
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+               Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+
+  /* Elevation */
+  --shadow-xs: 0 1px 2px 0 rgba(13,13,13,0.04);
+  --shadow-sm: 0 1px 3px 0 rgba(13,13,13,0.06), 0 1px 2px -1px rgba(13,13,13,0.04);
+  --shadow-md: 0 4px 6px -1px rgba(13,13,13,0.08), 0 2px 4px -2px rgba(13,13,13,0.06);
+  --shadow-lg: 0 10px 15px -3px rgba(13,13,13,0.08), 0 4px 6px -4px rgba(13,13,13,0.05);
+
+  /* Semantic surface tokens — preserved from pre-shell behaviour. */
   --background: #ffffff;
-  --foreground: #0d0d0d;
+  --foreground: var(--neutral-1);
 }
 
 html,

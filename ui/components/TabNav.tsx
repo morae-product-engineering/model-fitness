@@ -1,0 +1,119 @@
+// lifted from ui/prototype/shell.jsx:105 (TabNav)
+// All four prototype tabs render so the planned product shape is visible.
+// Only Scoreboard has a route today; Editor/Curator/History are disabled
+// with a tooltip until their routes ship in later slices.
+
+import Link from "next/link";
+
+export type TabId = "scoreboard" | "editor" | "curator" | "history";
+
+interface TabSpec {
+  id: TabId;
+  label: string;
+  href?: string;
+}
+
+const TABS: TabSpec[] = [
+  { id: "scoreboard", label: "Scoreboard", href: "/scoreboard?product=mli" },
+  { id: "editor", label: "Editor" },
+  { id: "curator", label: "Curator" },
+  { id: "history", label: "History" },
+];
+
+interface TabNavProps {
+  activeTab: TabId;
+}
+
+export default function TabNav({ activeTab }: TabNavProps) {
+  return (
+    <nav
+      data-testid="app-shell-tabs"
+      style={{
+        background: "#fff",
+        borderBottom: "1px solid var(--neutral-11)",
+        padding: "0 20px",
+        display: "flex",
+        alignItems: "center",
+        gap: 0,
+        height: 44,
+        fontFamily: "var(--font-sans)",
+        flexShrink: 0,
+      }}
+    >
+      {TABS.map((tab) => {
+        const isActive = tab.id === activeTab;
+        const enabled = Boolean(tab.href);
+
+        const inner = (
+          <span
+            style={{
+              position: "relative",
+              height: "100%",
+              padding: "0 16px",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+              fontFamily: "inherit",
+              fontSize: 13,
+              fontWeight: isActive ? 600 : 500,
+              color: isActive
+                ? "var(--neutral-1)"
+                : enabled
+                  ? "var(--neutral-6)"
+                  : "var(--neutral-9)",
+              cursor: enabled ? "pointer" : "not-allowed",
+            }}
+          >
+            {tab.label}
+            {isActive && (
+              <span
+                style={{
+                  position: "absolute",
+                  left: 12,
+                  right: 12,
+                  bottom: -1,
+                  height: 2,
+                  background: "var(--neutral-1)",
+                  borderRadius: 2,
+                }}
+              />
+            )}
+          </span>
+        );
+
+        return enabled ? (
+          <Link
+            key={tab.id}
+            href={tab.href!}
+            data-testid={`tab-${tab.id}`}
+            data-active={isActive ? "true" : "false"}
+            style={{
+              height: "100%",
+              textDecoration: "none",
+              display: "inline-flex",
+              alignItems: "stretch",
+            }}
+          >
+            {inner}
+          </Link>
+        ) : (
+          <span
+            key={tab.id}
+            data-testid={`tab-${tab.id}`}
+            data-active="false"
+            data-disabled="true"
+            title="Available in a later slice"
+            aria-disabled
+            style={{
+              height: "100%",
+              display: "inline-flex",
+              alignItems: "stretch",
+            }}
+          >
+            {inner}
+          </span>
+        );
+      })}
+    </nav>
+  );
+}

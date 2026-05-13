@@ -1,5 +1,7 @@
 import type { Config } from "tailwindcss";
 
+// Colours and font stacks resolve to CSS variables defined in app/globals.css,
+// which are themselves inlined from ui/prototype/assets/colors_and_type.css.
 const config: Config = {
   content: [
     "./app/**/*.{js,ts,jsx,tsx,mdx}",
@@ -8,31 +10,53 @@ const config: Config = {
   theme: {
     extend: {
       fontFamily: {
-        // Matches the prototype token: --font-sans
-        sans: [
-          "ui-sans-serif",
-          "system-ui",
-          "-apple-system",
-          "Segoe UI",
-          "Roboto",
-          "Helvetica Neue",
-          "Arial",
-          "sans-serif",
-        ],
+        sans: ["var(--font-sans)"],
+        mono: ["var(--font-mono)"],
       },
       colors: {
-        // Neutral palette lifted from prototype tokens
         neutral: {
-          1:  "#0d0d0d",
-          3:  "#262626",
-          5:  "#595959",
-          6:  "#737373",
-          10: "#d9d9d9",
-          11: "#e6e6e6",
-          12: "#f2f2f2",
-          13: "#f9f9f9",
+          1:  "var(--neutral-1)",
+          2:  "var(--neutral-2)",
+          3:  "var(--neutral-3)",
+          4:  "var(--neutral-4)",
+          5:  "var(--neutral-5)",
+          6:  "var(--neutral-6)",
+          7:  "var(--neutral-7)",
+          8:  "var(--neutral-8)",
+          9:  "var(--neutral-9)",
+          10: "var(--neutral-10)",
+          11: "var(--neutral-11)",
+          12: "var(--neutral-12)",
+          13: "var(--neutral-13)",
         },
-        orange: "#ff6900",
+        // Brand warm spectrum
+        red:           "var(--red)",
+        "red-orange":  "var(--red-orange)",
+        orange:        "var(--orange)",
+        "yellow-orange": "var(--yellow-orange)",
+        yellow:        "var(--yellow)",
+        // Semantic accents
+        green:         "var(--green)",
+        "warm-yellow": "var(--warm-yellow)",
+        "warm-red":    "var(--warm-red)",
+        purple:        "var(--purple)",
+        // Blues
+        "blue-1":      "var(--blue-1)",
+        "blue-2":      "var(--blue-2)",
+        // Tints (chip backgrounds)
+        "light-blue":   "var(--light-blue)",
+        "light-yellow": "var(--light-yellow)",
+        "light-green":  "var(--light-green)",
+        "light-red":    "var(--light-red)",
+        "light-purple": "var(--light-purple)",
+      },
+      boxShadow: {
+        xs: "var(--shadow-xs)",
+        // Tailwind already ships sm/md/lg; prefix the prototype's tokens
+        // so we don't shadow them. Components opt in explicitly.
+        "elev-sm": "var(--shadow-sm)",
+        "elev-md": "var(--shadow-md)",
+        "elev-lg": "var(--shadow-lg)",
       },
     },
   },
