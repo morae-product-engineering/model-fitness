@@ -220,6 +220,40 @@ export interface WireCandidateHistoryEntry {
   per_tier_scores: Record<string, string>;
 }
 
+// Rubric inlined in the candidate-detail response (MLI-274). `weight` arrives
+// as a Decimal JSON string and is converted to number at the parse boundary.
+// `status: "draft"` dimensions are surfaced for de-emphasised rendering; they
+// always carry `weight: "0"` per the rubric model's Tier validator.
+export type DimensionStatus = "active" | "draft";
+export type DimensionMethod =
+  | "deterministic"
+  | "metric"
+  | "llm_judge"
+  | "composite"
+  | "qualitative";
+export type DimensionDirection = "higher_is_better" | "lower_is_better";
+
+export interface WireRubricDimension {
+  id: string;
+  name: string;
+  description: string;
+  weight: string;
+  status: DimensionStatus;
+  method: DimensionMethod;
+  direction: DimensionDirection;
+}
+
+export interface WireRubricTier {
+  tier_id: TierId;
+  name: string;
+  dimensions: WireRubricDimension[];
+}
+
+export interface WireRubric {
+  version: string;
+  tiers: WireRubricTier[];
+}
+
 export interface WireCandidateDetail {
   product: string;
   candidate_id: string;
@@ -230,6 +264,7 @@ export interface WireCandidateDetail {
   tiers: TierId[];
   latest_run: WireCandidateLatestRun | null;
   history: WireCandidateHistoryEntry[];
+  rubric: WireRubric;
 }
 
 export interface CandidateTierResult {
@@ -253,6 +288,27 @@ export interface CandidateHistoryEntry {
   per_tier_scores: Partial<Record<TierId, number>>;
 }
 
+export interface RubricDimension {
+  id: string;
+  name: string;
+  description: string;
+  weight: number;
+  status: DimensionStatus;
+  method: DimensionMethod;
+  direction: DimensionDirection;
+}
+
+export interface RubricTier {
+  tier_id: TierId;
+  name: string;
+  dimensions: RubricDimension[];
+}
+
+export interface Rubric {
+  version: string;
+  tiers: RubricTier[];
+}
+
 export interface CandidateDetail {
   product: string;
   candidate_id: string;
@@ -263,6 +319,7 @@ export interface CandidateDetail {
   tiers: TierId[];
   latest_run: CandidateLatestRun | null;
   history: CandidateHistoryEntry[];
+  rubric: Rubric;
 }
 
 export function parseCandidateDetail(raw: WireCandidateDetail): CandidateDetail {
@@ -286,5 +343,16 @@ export function parseCandidateDetail(raw: WireCandidateDetail): CandidateDetail 
         Object.entries(h.per_tier_scores).map(([k, v]) => [k, parseFloat(v)]),
       ) as Partial<Record<TierId, number>>,
     })),
+    rubric: {
+      version: raw.rubric.version,
+      tiers: raw.rubric.tiers.map((t) => ({
+        tier_id: t.tier_id,
+        name: t.name,
+        dimensions: t.dimensions.map((d) => ({
+          ...d,
+          weight: parseFloat(d.weight),
+        })),
+      })),
+    },
   };
 }
