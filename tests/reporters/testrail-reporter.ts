@@ -186,13 +186,13 @@ export default class TestRailReporter implements Reporter {
       return null;
     }
 
-    const sliceNumber = this.deriveSliceNumber(suite);
-    if (sliceNumber === null) {
+    const sliceKey = this.deriveSliceKey(suite);
+    if (sliceKey === null) {
       console.warn(`${LOG_PREFIX} could not derive slice number from test paths, no-op`);
       return null;
     }
 
-    const suiteEnvKey = `TESTRAIL_SUITE_SLICE_${String(sliceNumber).padStart(2, '0')}`;
+    const suiteEnvKey = `TESTRAIL_SUITE_SLICE_${sliceKey}`;
     const suiteIdStr = process.env[suiteEnvKey];
     if (!suiteIdStr) {
       console.warn(`${LOG_PREFIX} ${suiteEnvKey} not set, no-op`);
@@ -208,11 +208,20 @@ export default class TestRailReporter implements Reporter {
     return { url: url.replace(/\/$/, ''), user, apiKey, projectId, suiteId };
   }
 
-  private deriveSliceNumber(suite: Suite): number | null {
-    const re = /slice-(\d+)/i;
+  // Returns the slice portion of the env-var key (the part after
+  // TESTRAIL_SUITE_SLICE_). Integer slices pad to two digits ("03");
+  // interstitial NpM slices keep the same integer pad and append
+  // an uppercase "P<M>" ("03P5"). Examples:
+  //   slice-01-walking-skeleton.spec.ts -> "01"
+  //   slice-3p5-editor-and-scoreboard.spec.ts -> "03P5"
+  private deriveSliceKey(suite: Suite): string | null {
+    const re = /slice-(\d+)(?:p(\d+))?/i;
     for (const test of suite.allTests()) {
       const m = test.location.file.match(re);
-      if (m) return Number.parseInt(m[1], 10);
+      if (m) {
+        const major = String(Number.parseInt(m[1], 10)).padStart(2, '0');
+        return m[2] !== undefined ? `${major}P${Number.parseInt(m[2], 10)}` : major;
+      }
     }
     return null;
   }

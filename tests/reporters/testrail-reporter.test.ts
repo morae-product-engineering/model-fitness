@@ -369,6 +369,67 @@ describe('TestRailReporter — result mapping', () => {
   });
 });
 
+describe('TestRailReporter — slice derivation', () => {
+  it('derives suite id from a slice-NpM filename (e.g. slice-3p5) without colliding with slice-N', async () => {
+    vi.stubEnv('TESTRAIL_SUITE_SLICE_03', '67');
+    vi.stubEnv('TESTRAIL_SUITE_SLICE_03P5', '89');
+
+    const test = makeTest({
+      location: {
+        file: '/repo/tests/e2e/slice-3p5-editor-and-scoreboard.spec.ts',
+        line: 1,
+        column: 1,
+      },
+    });
+
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      const method = init?.method ?? 'GET';
+      if (method === 'GET' && url.includes('get_cases/')) {
+        return jsonResponse([{ id: 1, title: test.title }]);
+      }
+      if (method === 'POST' && url.includes('add_run/')) {
+        return jsonResponse({ id: 1, url: 'http://run' });
+      }
+      if (method === 'POST') return jsonResponse({});
+      throw new Error(`unexpected fetch: ${method} ${url}`);
+    });
+
+    const reporter = new TestRailReporter();
+    await runLifecycle(reporter, [test], [[test, makeResult()]]);
+
+    expect(parseBody(findCall('POST', 'add_run/42')).suite_id).toBe(89);
+  });
+
+  it('derives suite id from a plain slice-NN filename (slice-03)', async () => {
+    vi.stubEnv('TESTRAIL_SUITE_SLICE_03', '67');
+
+    const test = makeTest({
+      location: {
+        file: '/repo/tests/e2e/slice-03-trends.spec.ts',
+        line: 1,
+        column: 1,
+      },
+    });
+
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      const method = init?.method ?? 'GET';
+      if (method === 'GET' && url.includes('get_cases/')) {
+        return jsonResponse([{ id: 1, title: test.title }]);
+      }
+      if (method === 'POST' && url.includes('add_run/')) {
+        return jsonResponse({ id: 1, url: 'http://run' });
+      }
+      if (method === 'POST') return jsonResponse({});
+      throw new Error(`unexpected fetch: ${method} ${url}`);
+    });
+
+    const reporter = new TestRailReporter();
+    await runLifecycle(reporter, [test], [[test, makeResult()]]);
+
+    expect(parseBody(findCall('POST', 'add_run/42')).suite_id).toBe(67);
+  });
+});
+
 describe('TestRailReporter — fail-safe', () => {
   it('is a no-op when env vars are unset (does not throw, does not call fetch)', async () => {
     vi.unstubAllEnvs(); // wipe everything beforeEach set up
