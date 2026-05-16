@@ -262,6 +262,12 @@ export interface WireCandidateDetail {
   deployment: string;
   status: Status;
   tiers: TierId[];
+  // Optional reference to a base model for custom-trained/fine-tuned
+  // candidates. None of the v0.1 slate carries one; the field is part of the
+  // wire shape so the modal's conditional render is real code (MLI-275).
+  // Backend serialisation is omitted until the first fine-tune lands —
+  // surface decision tracked in the MLI-267 architectural-input from MLI-275.
+  base_model?: string | null;
   latest_run: WireCandidateLatestRun | null;
   history: WireCandidateHistoryEntry[];
   rubric: WireRubric;
@@ -317,6 +323,7 @@ export interface CandidateDetail {
   deployment: string;
   status: Status;
   tiers: TierId[];
+  base_model: string | null;
   latest_run: CandidateLatestRun | null;
   history: CandidateHistoryEntry[];
   rubric: Rubric;
@@ -325,6 +332,7 @@ export interface CandidateDetail {
 export function parseCandidateDetail(raw: WireCandidateDetail): CandidateDetail {
   return {
     ...raw,
+    base_model: raw.base_model ?? null,
     latest_run: raw.latest_run
       ? {
           ...raw.latest_run,

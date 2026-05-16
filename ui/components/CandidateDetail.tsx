@@ -38,12 +38,19 @@ import {
   WireCandidateDetail,
   parseCandidateDetail,
 } from "@/lib/scoreboard";
+import { inferVendor } from "@/lib/vendor";
+import Spark from "./primitives/Spark";
 
 interface CandidateDetailProps {
   product: string;
   deployment: string;
   displayName: string;
   family: Family;
+  // Optional — when provided the header renders a vendor badge derived from
+  // the slate id (MLI-275). Older callers that don't thread it through still
+  // get the rest of the modal. The fetched payload also carries
+  // `candidate_id`, but the prop lets us render the badge during loading.
+  candidateId?: string;
   tierId: TierId;
   apiBaseUrl: string;
   onClose: () => void;
@@ -59,6 +66,7 @@ export default function CandidateDetail({
   deployment,
   displayName,
   family,
+  candidateId,
   tierId,
   apiBaseUrl,
   onClose,
@@ -132,6 +140,9 @@ export default function CandidateDetail({
           displayName={displayName}
           deployment={deployment}
           family={family}
+          candidateId={
+            state.kind === "loaded" ? state.detail.candidate_id : candidateId
+          }
           onClose={onClose}
         />
         <div className="flex-1 overflow-y-auto p-5">
@@ -150,23 +161,36 @@ function Header({
   displayName,
   deployment,
   family,
+  candidateId,
   onClose,
 }: {
   displayName: string;
   deployment: string;
   family: Family;
+  candidateId: string | undefined;
   onClose: () => void;
 }) {
   const dotCls = family === "reasoning" ? "bg-orange" : "bg-neutral-5";
+  const vendor = candidateId ? inferVendor(candidateId) : null;
   return (
     <div className="px-5 py-4 border-b border-neutral-11 flex items-start justify-between gap-4">
       <div className="min-w-0">
-        <h2 className="text-sm font-semibold text-neutral-1 flex items-center gap-2">
+        <h2 className="text-sm font-semibold text-neutral-1 flex items-center gap-2 flex-wrap">
           <span
             aria-hidden="true"
             className={`inline-block w-1.5 h-1.5 rounded-full ${dotCls}`}
           />
-          {displayName}
+          <span className="truncate">{displayName}</span>
+          {candidateId && (
+            <span
+              data-testid="vendor-badge"
+              data-vendor={vendor ?? "unknown"}
+              title={vendor ? `Vendor: ${vendor}` : "Vendor unknown"}
+              className="inline-block text-[10px] font-semibold uppercase tracking-wide bg-neutral-12 text-neutral-3 rounded px-1.5 py-0.5"
+            >
+              {vendor ?? "—"}
+            </span>
+          )}
         </h2>
         <p className="text-xs text-neutral-6 font-mono mt-0.5">{deployment}</p>
       </div>
@@ -236,6 +260,17 @@ function LoadedBody({
   const perDimension = tierResult?.per_dimension ?? {};
   const hasRun = detail.latest_run !== null && tierResult !== null;
 
+  // History sparkline series for this tier. `history` arrives newest-first;
+  // reverse so the line reads oldest-to-newest left-to-right, matching the
+  // TrendStrip convention (MLI-186). Entries without a score for this tier
+  // drop out — Spark renders an empty SVG when fewer than two points remain.
+  const sparkSeries = [...detail.history]
+    .reverse()
+    .map((h) => h.per_tier_scores[tierId])
+    .filter((v): v is number => typeof v === "number");
+  const sparkStroke =
+    detail.family === "reasoning" ? "var(--orange)" : "var(--neutral-5)";
+
   return (
     <>
       {hasRun && detail.latest_run ? (
@@ -247,6 +282,26 @@ function LoadedBody({
       ) : (
         <UnscoredStamp rubricVersion={detail.rubric.version} />
       )}
+      {detail.base_model && (
+        <p
+          data-testid="candidate-detail-base-model"
+          className="text-xs text-neutral-6 mt-1"
+        >
+          Base model:{" "}
+          <span className="text-neutral-3 font-mono">{detail.base_model}</span>
+        </p>
+      )}
+      <div className="mt-3 flex items-center justify-between gap-3">
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-neutral-6">
+          Tier history
+        </span>
+        <span
+          data-testid="candidate-sparkline"
+          aria-label={`Score history for ${detail.display_name}`}
+        >
+          <Spark data={sparkSeries} stroke={sparkStroke} w={120} h={28} />
+        </span>
+      </div>
       <h3 className="text-xs font-semibold text-neutral-6 uppercase tracking-wide mb-2 mt-4">
         Per-dimension breakdown
       </h3>

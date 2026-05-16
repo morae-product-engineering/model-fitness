@@ -404,6 +404,72 @@ describe("CandidateDetail", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  // MLI-275 — vendor badge, candidate sparkline, base-model surface
+  describe("MLI-275 surfaces", () => {
+    it("renders the vendor-badge in the header when candidateId is supplied", async () => {
+      mockFetchOnce(loadedPayload({ candidate_id: "gpt-4o" }));
+      renderDetail({ candidateId: "gpt-4o" });
+      await screen.findByTestId("candidate-detail-dimensions");
+      const badge = screen.getByTestId("vendor-badge");
+      expect(badge.textContent).toBe("OpenAI");
+      expect(badge.getAttribute("data-vendor")).toBe("OpenAI");
+    });
+
+    it("renders the candidate-sparkline once the payload loads", async () => {
+      mockFetchOnce(
+        loadedPayload({
+          tiers: ["tier_3"],
+          history: [
+            {
+              run_id: "r3",
+              started_at: "2026-05-12T12:00:00Z",
+              completed_at: "2026-05-12T12:00:30Z",
+              per_tier_scores: { tier_3: "78.500" },
+            },
+            {
+              run_id: "r2",
+              started_at: "2026-05-05T12:00:00Z",
+              completed_at: "2026-05-05T12:00:30Z",
+              per_tier_scores: { tier_3: "75.000" },
+            },
+            {
+              run_id: "r1",
+              started_at: "2026-04-28T12:00:00Z",
+              completed_at: "2026-04-28T12:00:30Z",
+              per_tier_scores: { tier_3: "72.000" },
+            },
+          ],
+        }),
+      );
+      renderDetail({ candidateId: "gpt-4o" });
+      await screen.findByTestId("candidate-detail-dimensions");
+      const sparkline = screen.getByTestId("candidate-sparkline");
+      const path = sparkline.querySelector("svg path");
+      expect(path).not.toBeNull();
+      expect(path!.getAttribute("d")).toMatch(/^M/);
+    });
+
+    it("renders base-model line only when the payload carries base_model", async () => {
+      // First render: no base_model → no line.
+      mockFetchOnce(loadedPayload());
+      const { unmount } = renderDetail({ candidateId: "gpt-4o" });
+      await screen.findByTestId("candidate-detail-dimensions");
+      expect(
+        screen.queryByTestId("candidate-detail-base-model"),
+      ).not.toBeInTheDocument();
+      unmount();
+
+      // Second render: base_model present → line surfaces with the value.
+      mockFetchOnce(
+        loadedPayload({ base_model: "mistral-large-3" }),
+      );
+      renderDetail({ candidateId: "gpt-4o" });
+      await screen.findByTestId("candidate-detail-dimensions");
+      const line = screen.getByTestId("candidate-detail-base-model");
+      expect(line.textContent).toContain("mistral-large-3");
+    });
+  });
+
   it("calls onClose when the backdrop is clicked but not when the panel is clicked", async () => {
     mockFetchOnce(loadedPayload());
     const onClose = vi.fn();
