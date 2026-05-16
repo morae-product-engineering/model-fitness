@@ -28,5 +28,6 @@ test('scoreboard shows ranked candidates with trend data', async ({ page }) => {
 
   await t3Candidates.first().click();
   await expect(page.getByTestId('candidate-detail-dimensions')).toBeVisible();
-  await expect(page.getByTestId('dimension-row')).toHaveCount(2);
+  // MLI-272: tier_3 rubric grew 2 → 7 (2 active + 5 draft dimensions).
+  await expect(page.getByTestId('dimension-row')).toHaveCount(7);
 });
