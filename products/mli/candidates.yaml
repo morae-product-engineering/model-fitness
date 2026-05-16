@@ -6,6 +6,12 @@
 # in this slate) need budget headroom for the reasoning trace before visible
 # content emits — see MLI-165 §1 / MLI-166 smoke-test findings.
 #
+# `context_window` is per-candidate, no default (MLI-272). Required by the
+# `context_window_adequacy` Tier-2 dimension; the matrix engine threads it
+# into evaluator context via the candidate envelope. Sourced from the
+# upstream model's published spec — inferring from the deployment name is
+# fragile.
+#
 # Endpoint and account key live in dev Key Vault (`foundry-account-endpoint`,
 # `foundry-account-key`), shared across all 10 deployments. The binding plugin
 # (mmfp/bindings/foundry) reads them at runtime; this file is safe to commit.
@@ -18,6 +24,7 @@ candidates:
     display_name: Phi-4 mini instruct
     family: chat
     max_tokens: 1024
+    context_window: 128000
     tiers: [tier_1]
     binding:
       provider: azure_foundry
@@ -32,6 +39,7 @@ candidates:
     display_name: GPT-4.1 nano
     family: chat
     max_tokens: 1024
+    context_window: 1000000
     tiers: [tier_1]
     binding:
       provider: azure_foundry
@@ -46,6 +54,7 @@ candidates:
     display_name: Llama-4 Scout 17B 16E Instruct
     family: chat
     max_tokens: 1024
+    context_window: 10000000
     tiers: [tier_1]
     binding:
       provider: azure_foundry
@@ -60,6 +69,7 @@ candidates:
     display_name: Mistral Small 2503
     family: chat
     max_tokens: 1024
+    context_window: 32768
     tiers: [tier_1]
     binding:
       provider: azure_foundry
@@ -75,6 +85,7 @@ candidates:
     display_name: GPT-4.1 mini
     family: chat
     max_tokens: 1024
+    context_window: 1000000
     tiers: [tier_1, tier_2]
     binding:
       provider: azure_foundry
@@ -90,6 +101,7 @@ candidates:
     display_name: GPT-4o
     family: chat
     max_tokens: 1024
+    context_window: 128000
     tiers: [tier_2, tier_3]
     binding:
       provider: azure_foundry
@@ -107,6 +119,7 @@ candidates:
     # emitting visible content. 4096 gives enough headroom for Tier 2/Tier 3
     # outputs after the reasoning trace; raise if cells start truncating.
     max_tokens: 4096
+    context_window: 128000
     tiers: [tier_2, tier_3]
     binding:
       provider: azure_foundry
@@ -121,6 +134,7 @@ candidates:
     display_name: Llama-4 Maverick 17B 128E Instruct FP8
     family: chat
     max_tokens: 1024
+    context_window: 1000000
     tiers: [tier_2, tier_3]
     binding:
       provider: azure_foundry
@@ -135,6 +149,7 @@ candidates:
     display_name: Mistral Large 3
     family: chat
     max_tokens: 1024
+    context_window: 128000
     tiers: [tier_2]
     binding:
       provider: azure_foundry
@@ -149,6 +164,7 @@ candidates:
     display_name: Mistral Large 3 (slot 2)
     family: chat
     max_tokens: 1024
+    context_window: 128000
     tiers: [tier_3]
     binding:
       provider: azure_foundry

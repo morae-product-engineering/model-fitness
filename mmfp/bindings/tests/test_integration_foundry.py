@@ -36,6 +36,7 @@ def test_invokes_real_deployment():
         display_name=INTEGRATION_DEPLOYMENT,
         family=CandidateFamily.CHAT,
         max_tokens=64,
+        context_window=128000,  # MLI-272: Candidate.context_window now required.
         tiers=["tier_1"],
         binding=CandidateBinding(
             provider="azure_foundry",

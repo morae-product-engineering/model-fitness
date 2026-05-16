@@ -93,6 +93,7 @@ def _candidate(
         display_name=display_name,
         family=family,
         max_tokens=1024,
+        context_window=128000,  # MLI-272: Candidate.context_window now required.
         tiers=tiers or ["tier_1"],
         status=status,
         binding=CandidateBinding(

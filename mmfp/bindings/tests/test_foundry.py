@@ -28,6 +28,7 @@ def _candidate(
         display_name=deployment,
         family=family,
         max_tokens=1024,
+        context_window=128000,  # MLI-272: Candidate.context_window now required.
         tiers=["tier_1"],
         binding=CandidateBinding(
             provider="azure_foundry",
