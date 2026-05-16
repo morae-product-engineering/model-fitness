@@ -26,6 +26,7 @@ from mmfp.models._common import (
     UTCDatetime,
 )
 from mmfp.models.candidate import CandidateStatus
+from mmfp.models.rubric import Tier
 
 
 class SourceField(str, Enum):
@@ -109,7 +110,13 @@ class Scorecard(BaseModel):
     weighted_score: Decimal = Field(ge=Decimal("0"), le=Decimal("100"))
     per_dimension: dict[str, Decimal] = Field(
         default_factory=dict,
-        description="dimension_id -> weighted contribution (0–100 * weight%)",
+        description=(
+            "dimension_id -> mean normalised score (0–100) across the examples "
+            "scored for that dimension. The aggregate `weighted_score` is the "
+            "rubric-weighted combination of these means, normalised by the "
+            "active-weight total per tier when a Tier is provided to "
+            "`scores_for_tier`."
+        ),
     )
     status: CandidateStatus = CandidateStatus.UNDER_EVALUATION
     tied_with: list[str] = Field(default_factory=list)
@@ -141,13 +148,32 @@ class MatrixRun(BaseModel):
             raise ValueError("completed_at must be ≥ started_at")
         return self
 
-    def scores_for_tier(self, tier_id: str) -> list[Scorecard]:
+    def scores_for_tier(
+        self, tier_id: str, tier: Tier | None = None
+    ) -> list[Scorecard]:
         """Aggregate results into per-candidate Scorecards for a tier.
 
-        Pure aggregation — no rubric reference, no thresholding. The caller
-        (engine, UI route) decides whether to attach a `status` based on
-        thresholds and prior runs.
+        When `tier` is omitted, `weighted_score` is the unweighted mean of the
+        per-dimension means — the rubric-agnostic view used by callers that
+        don't have a `Rubric` in hand. When `tier` is provided, `weighted_score`
+        is the rubric-weighted aggregate over the tier's **active** dimensions
+        only, normalised by the active-weight total. This is the path the
+        scoreboard and candidate-detail surfaces will adopt once they thread
+        the loaded rubric through (later sub-tasks in MLI-267).
+
+        Normalising by the active-weight total — rather than by 100 — means a
+        tier whose draft partition still owns most of the weight (e.g. Tier 3
+        with 20% active in v0.1) still produces 0–100 scores rather than
+        artificially-compressed ones. See MLI-269 / MLI-267.
+
+        Pure aggregation — no thresholding. The caller decides whether to
+        attach a `status` based on thresholds and prior runs.
         """
+        if tier is not None and tier.id != tier_id:
+            raise ValueError(
+                f"scores_for_tier: tier.id='{tier.id}' does not match tier_id='{tier_id}'"
+            )
+
         per_candidate: dict[str, list[MatrixRunResult]] = defaultdict(list)
         for r in self.results:
             if r.tier_id == tier_id:
@@ -157,12 +183,6 @@ class MatrixRun(BaseModel):
         for candidate_id, rows in per_candidate.items():
             if not rows:
                 continue
-            # Mean normalised score per dimension; engine v1 collapses
-            # multiple examples per dimension by mean. Per-dimension weighting
-            # is the rubric's job — this view stays rubric-agnostic and just
-            # surfaces the average normalised score per dimension. The
-            # weighted score is the unweighted mean across dimensions; the
-            # engine in MLI-172 will replace this with rubric-weighted maths.
             by_dim: dict[str, list[Decimal]] = defaultdict(list)
             for r in rows:
                 by_dim[r.score.dimension_id].append(r.score.normalized_score)
@@ -170,11 +190,26 @@ class MatrixRun(BaseModel):
                 dim_id: sum(scores, Decimal("0")) / Decimal(len(scores))
                 for dim_id, scores in by_dim.items()
             }
-            weighted = (
-                sum(per_dim_mean.values(), Decimal("0")) / Decimal(len(per_dim_mean))
-                if per_dim_mean
-                else Decimal("0")
-            )
+
+            if tier is not None:
+                # Rubric-weighted path: sum_d (mean_d * weight_d) / active_total,
+                # over active dimensions only. Active dims that produced no
+                # results contribute 0 to the numerator but their weight still
+                # counts in the denominator — coverage gaps lower the score
+                # rather than silently inflating it.
+                active = tier.active_dimensions()
+                active_total = sum((d.weight for d in active), start=Decimal("0"))
+                numerator = sum(
+                    (per_dim_mean.get(d.id, Decimal("0")) * d.weight for d in active),
+                    start=Decimal("0"),
+                )
+                weighted = numerator / active_total if active_total > 0 else Decimal("0")
+            else:
+                weighted = (
+                    sum(per_dim_mean.values(), Decimal("0")) / Decimal(len(per_dim_mean))
+                    if per_dim_mean
+                    else Decimal("0")
+                )
             cards.append(
                 Scorecard(
                     tier_id=tier_id,

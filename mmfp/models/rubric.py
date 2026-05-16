@@ -56,15 +56,41 @@ class Direction(str, Enum):
 Weight = Annotated[Decimal, Field(ge=Decimal("0"), le=Decimal("100"))]
 
 
+DimensionStatus = Literal["active", "draft"]
+
+
 class Dimension(BaseModel):
-    """One scorable dimension within a tier."""
+    """One scorable dimension within a tier.
+
+    `status` partitions a tier into the dimensions that contribute to scoring
+    today (`active`) and those that are declared in the rubric YAML so the
+    shape matches the v0.1 reference document but are not yet measured
+    (`draft` — typically waiting on an evaluator family that ships in a
+    later slice). Draft dimensions are excluded from the per-tier weight
+    sum and from the matrix-engine's weighted aggregation; activation
+    happens by flipping the field once the evaluator lands.
+    """
 
     model_config = MMFP_MODEL_CONFIG
 
     id: str = Field(min_length=1, description="Stable identifier, e.g. 'classification_accuracy'")
     name: str = Field(min_length=1, description="Human-readable label")
     description: str = Field(min_length=1, description="What this dimension measures")
-    weight: Weight = Field(description="Percentage weight within its tier; tier weights sum to 100")
+    weight: Weight = Field(
+        description=(
+            "Percentage weight within its tier. The active partition's weights "
+            "sum to (0, 100]; draft dimensions must declare `weight: 0` (see "
+            "Tier validator and the MLI-267 architectural-input from MLI-269)."
+        )
+    )
+    status: DimensionStatus = Field(
+        default="active",
+        description=(
+            "Whether this dimension contributes to scoring (`active`) or is "
+            "declared-but-not-yet-measured (`draft`). Existing rubrics without "
+            "this field load as fully active."
+        ),
+    )
     method: Method
     direction: Direction = Direction.HIGHER_IS_BETTER
     # The MLI-258 engine signature still takes `dimension_evaluators` as an
@@ -82,7 +108,15 @@ class Dimension(BaseModel):
 
 
 class Tier(BaseModel):
-    """One tier in the rubric (Classification & Routing / Structured Generation / Synthesis)."""
+    """One tier in the rubric (Classification & Routing / Structured Generation / Synthesis).
+
+    A tier's dimensions are partitioned by `Dimension.status` into the active
+    set (contributes to scoring; weights sum to 100 within the active partition)
+    and the draft set (declared so the rubric shape matches the v0.1 reference
+    doc but not yet measured; weights must be 0). The matrix engine normalises
+    its weighted aggregation against the active-weight total, so a tier with
+    sparse active coverage still produces 0–100 scores.
+    """
 
     model_config = MMFP_MODEL_CONFIG
 
@@ -94,13 +128,43 @@ class Tier(BaseModel):
     mode: EvaluationMode
     dimensions: list[Dimension] = Field(min_length=1)
 
+    def active_dimensions(self) -> list[Dimension]:
+        """Dimensions that contribute to scoring (status='active'), preserving declaration order."""
+        return [d for d in self.dimensions if d.status == "active"]
+
+    def draft_dimensions(self) -> list[Dimension]:
+        """Dimensions declared in the rubric but not yet measured (status='draft')."""
+        return [d for d in self.dimensions if d.status == "draft"]
+
     @model_validator(mode="after")
-    def _dimensions_sum_to_100(self) -> "Tier":
-        total = sum((d.weight for d in self.dimensions), start=Decimal("0"))
-        if abs(total - Decimal("100")) > _WEIGHT_SUM_TOLERANCE:
+    def _dimensions_partition_is_valid(self) -> "Tier":
+        # Active partition weights must sum to (0, 100]. Strictly > 0 so a tier
+        # with no active dimensions fails fast at load time rather than producing
+        # a divide-by-zero in the engine. <= 100 mirrors the per-dimension cap
+        # and the v0.1 reference's "weights are tier shares" intent.
+        active = self.active_dimensions()
+        active_total = sum((d.weight for d in active), start=Decimal("0"))
+        if active_total <= Decimal("0"):
             raise ValueError(
-                f"tier '{self.id}' dimension weights must sum to 100, got {total}"
+                f"tier '{self.id}' has no active dimension weight (sum={active_total}); "
+                "at least one dimension must have status='active' with weight > 0"
             )
+        if active_total - Decimal("100") > _WEIGHT_SUM_TOLERANCE:
+            raise ValueError(
+                f"tier '{self.id}' active dimension weights must sum to <= 100, got {active_total}"
+            )
+
+        # Per MLI-267 architectural-input (MLI-269): draft dimensions are
+        # documentary placeholders; their weight must be exactly 0 to avoid
+        # the "this 25 doesn't count" footgun in the YAML. Stewards re-balance
+        # weights at activation time anyway.
+        nonzero_drafts = [d.id for d in self.draft_dimensions() if d.weight != Decimal("0")]
+        if nonzero_drafts:
+            raise ValueError(
+                f"tier '{self.id}' draft dimensions must have weight=0, "
+                f"got non-zero weights for: {nonzero_drafts}"
+            )
+
         ids = [d.id for d in self.dimensions]
         if len(set(ids)) != len(ids):
             raise ValueError(f"tier '{self.id}' has duplicate dimension ids: {ids}")

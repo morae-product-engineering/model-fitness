@@ -42,6 +42,12 @@ Engine takes an explicit `dimension_evaluators: Mapping[str, str]` at
 this PR keeps the model untouched. Validated up-front: missing or unknown
 evaluator names raise before any model is called.
 
+Only `status='active'` dimensions are dispatched. `draft` dimensions are
+declared in the rubric so its shape matches the v0.1 reference document
+but they emit no binding call, no evaluator, no `MatrixRunResult` —
+activation is by status flip when their evaluator family ships (MLI-269,
+MLI-267).
+
 LangSmith tracing
 -----------------
 Every binding invoke and every evaluator scoring is a traceable span,
@@ -194,10 +200,12 @@ class MatrixEngine:
                 evaluator_cache[name] = self._evaluator_factory(name)
             return evaluator_cache[name]
 
-        # Pre-resolve every evaluator referenced by the rubric. If any
-        # name is bogus, fail before invoking any model.
+        # Pre-resolve every evaluator referenced by the rubric. Only active
+        # dimensions are dispatched (MLI-269: draft dimensions are declared
+        # for shape but not measured), so the registry lookup is also active-
+        # only — drafts need no evaluator binding.
         for tier in rubric.tiers:
-            for dimension in tier.dimensions:
+            for dimension in tier.active_dimensions():
                 get_evaluator(dimension_evaluators[dimension.id])
 
         datasets_by_tier: dict[str, list[Dataset]] = defaultdict(list)
@@ -248,16 +256,20 @@ class MatrixEngine:
     def _validate_coverage(
         rubric: Rubric, dimension_evaluators: Mapping[str, str]
     ) -> None:
+        # Active dimensions must have an evaluator (they will run). Drafts
+        # don't need one — they're declared in the YAML so the rubric shape
+        # matches the v0.1 reference doc, but the engine skips them until
+        # status flips to active (MLI-269 / MLI-267).
         missing = [
             d.id
             for tier in rubric.tiers
-            for d in tier.dimensions
+            for d in tier.active_dimensions()
             if d.id not in dimension_evaluators
         ]
         if missing:
             raise ValueError(
                 f"dimension_evaluators missing entries for: {sorted(missing)}. "
-                f"Every rubric dimension must declare an evaluator."
+                f"Every active rubric dimension must declare an evaluator."
             )
 
     @staticmethod
@@ -387,7 +399,7 @@ class MatrixEngine:
         )
 
         results: list[MatrixRunResult] = []
-        for dimension in tier.dimensions:
+        for dimension in tier.active_dimensions():
             evaluator = get_evaluator(dimension_evaluators[dimension.id])
             results.append(
                 self._score_dimension(
