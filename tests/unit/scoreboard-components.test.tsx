@@ -14,7 +14,7 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import TierCard from '../../ui/components/TierCard';
 import Scorecard from '../../ui/components/Scorecard';
-import { TIERS, Candidate, TierId } from '../../ui/lib/scoreboard';
+import { TIERS, Candidate, TierId, Trends } from '../../ui/lib/scoreboard';
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -232,6 +232,99 @@ describe('Scorecard', () => {
       render(<Scorecard tierId={TIER_1} candidates={candidates} />);
       expect(screen.getAllByTestId('family-icon-chat')).toHaveLength(2);
       expect(screen.getAllByTestId('family-icon-reasoning')).toHaveLength(1);
+    });
+  });
+
+  // MLI-275 — per-row vendor badge
+  describe('vendor badge', () => {
+    it('renders a vendor-badge per row with the inferred vendor', () => {
+      const candidates = [
+        makeCandidate({ candidate_id: 'gpt-4o', display_name: 'GPT-4o' }),
+        makeCandidate({ candidate_id: 'llama-4-scout', display_name: 'Llama-4 Scout' }),
+        makeCandidate({ candidate_id: 'mistral-large-3', display_name: 'Mistral Large 3' }),
+      ];
+      render(<Scorecard tierId={TIER_1} candidates={candidates} />);
+      const badges = screen.getAllByTestId('vendor-badge');
+      expect(badges).toHaveLength(3);
+      expect(badges[0]!.textContent).toBe('OpenAI');
+      expect(badges[1]!.textContent).toBe('Meta');
+      expect(badges[2]!.textContent).toBe('Mistral');
+    });
+
+    it('falls back to em-dash for an unknown candidate-id prefix', () => {
+      render(
+        <Scorecard
+          tierId={TIER_1}
+          candidates={[makeCandidate({ candidate_id: 'custom-unknown' })]}
+        />,
+      );
+      const badge = screen.getByTestId('vendor-badge');
+      expect(badge.textContent).toBe('—');
+      expect(badge.getAttribute('data-vendor')).toBe('unknown');
+    });
+  });
+
+  // MLI-275 — per-row candidate sparkline (distinct from MLI-186 trend strip)
+  describe('candidate sparkline', () => {
+    function makeTrends(overrides: Partial<Trends> = {}): Trends {
+      return {
+        product: 'mli',
+        tier_id: TIER_1,
+        runs: [
+          {
+            run_id: 'r2',
+            rubric_version: 'v0.1',
+            started_at: '2026-05-15T12:00:00Z',
+            completed_at: '2026-05-15T12:00:30Z',
+          },
+          {
+            run_id: 'r1',
+            rubric_version: 'v0.1',
+            started_at: '2026-05-14T12:00:00Z',
+            completed_at: '2026-05-14T12:00:30Z',
+          },
+        ],
+        candidates: [
+          {
+            candidate_id: 'gpt-4o',
+            display_name: 'GPT-4o',
+            family: 'chat',
+            deployment: 'gpt-4o',
+            status: 'under_evaluation',
+            points: [
+              { run_id: 'r2', weighted_score: 87.0 },
+              { run_id: 'r1', weighted_score: 82.0 },
+            ],
+          },
+        ],
+        ...overrides,
+      };
+    }
+
+    it('renders a candidate-sparkline element per row even without trends', () => {
+      render(
+        <Scorecard
+          tierId={TIER_1}
+          candidates={[makeCandidate(), makeCandidate({ candidate_id: 'b' })]}
+        />,
+      );
+      // Empty sparkline still renders the testid-bearing wrapper so the
+      // Playwright selector resolves on partial trend data.
+      expect(screen.getAllByTestId('candidate-sparkline')).toHaveLength(2);
+    });
+
+    it('renders a real path when trends carry two or more points', () => {
+      render(
+        <Scorecard
+          tierId={TIER_1}
+          candidates={[makeCandidate({ candidate_id: 'gpt-4o' })]}
+          trends={makeTrends()}
+        />,
+      );
+      const wrapper = screen.getByTestId('candidate-sparkline');
+      const path = wrapper.querySelector('svg path');
+      expect(path).not.toBeNull();
+      expect(path!.getAttribute('d')).toMatch(/^M/);
     });
   });
 
