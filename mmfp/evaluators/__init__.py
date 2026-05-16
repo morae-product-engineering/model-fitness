@@ -1,8 +1,9 @@
-"""Evaluator registry and the deterministic-trio re-exports.
+"""Evaluator registry and the deterministic + metric re-exports.
 
 Importing this package triggers registration of every concrete evaluator in
-`mmfp.evaluators.deterministic` (and, later, `.inferential` and
-`.composite`). The matrix engine looks up evaluator classes via `get(name)`.
+`mmfp.evaluators.deterministic` and `mmfp.evaluators.metric` (and, later,
+`.inferential` and `.composite`). The matrix engine looks up evaluator
+classes via `get(name)`.
 """
 
 from mmfp.evaluators._registry import get, names, register
@@ -12,6 +13,10 @@ from mmfp.evaluators.deterministic import (  # noqa: E402, F401
     exact_match,
     json_schema,
     regex_match,
+)
+from mmfp.evaluators.metric import (  # noqa: E402, F401
+    cost_per_call,
+    latency_p95,
 )
 from mmfp.plugins.evaluator import EvaluatorPlugin
 
