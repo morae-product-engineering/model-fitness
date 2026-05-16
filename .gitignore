@@ -36,6 +36,12 @@ docs/exports/*
 # macOS
 .DS_Store
 **/.DS_Store
+# Finder/iCloud copy-on-conflict duplicates (e.g. "foo 2.tsx").
+* 2.*
+* 3.*
+
+# TypeScript incremental build cache
+*.tsbuildinfo
 # Structurizr Lite local cache
 docs/architecture/.structurizr/
 docs/architecture/workspace.json
