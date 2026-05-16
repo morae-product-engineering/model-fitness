@@ -10,6 +10,12 @@ under `mmfp.evaluators.inferential`. The matrix engine (MLI-172) iterates the
 rubric and dispatches to evaluators by name via the registry in
 `mmfp.evaluators`.
 
+Dimensions partition by `Dimension.status` (MLI-269): only `active` dimensions
+flow to evaluator dispatch. `draft` dimensions are declared in the rubric so
+its shape matches the v0.1 reference document, but they are not measured —
+no binding call, no evaluator, no `EvaluatorScore`. Evaluators don't see the
+`status` flag; the engine filters before dispatch.
+
 Reasoning models emit both `content` and `reasoning_content`. Each evaluator
 declares which field it scores via the `scores_field` class attribute
 (default: `CONTENT`). The matrix engine extracts the appropriate field
@@ -34,7 +40,10 @@ class EvaluatorPlugin(ABC):
     scores_field: ClassVar[SourceField] = SourceField.CONTENT
     """Which response field this evaluator scores. Tier 1 / Tier 2 evaluators
     must score `content` only (see MLI-165 §2). Tier 3 evaluators that score
-    the reasoning trace override this on the subclass."""
+    the reasoning trace override this on the subclass. Tier-1/2/3 here refer
+    to the rubric tier; status (active/draft) is orthogonal — both active and
+    draft dimensions live within a tier, but only active ones are dispatched
+    to an evaluator."""
 
     @abstractmethod
     def evaluate(
