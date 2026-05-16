@@ -1,8 +1,22 @@
 "use client";
 
-// Candidate detail drill-down (MLI-187). Side modal opened from a scoreboard
-// row; fetches the candidate-detail endpoint (MLI-184) on mount and renders
-// the per-dimension breakdown for the tier the row was clicked in.
+// Candidate detail drill-down (MLI-187, weight-aware breakdown MLI-274).
+// Side modal opened from a scoreboard row; fetches the candidate-detail
+// endpoint (MLI-184) on mount and renders the per-dimension breakdown for
+// the tier the row was clicked in.
+//
+// MLI-274 replaced the bar placeholder with a rubric-weight-aware view:
+//   * Each row shows the dimension name, weight (data-testid="dim-weight-<id>"),
+//     normalised score, and weight × score contribution to the tier composite.
+//   * Active dimensions (rubric.dimension.status === "active") contribute to
+//     the composite; the engine normalises against the active-weight total
+//     (per MLI-269) so the contribution shown is `(weight * score) / 100` —
+//     summing the contributions reproduces the composite the API returns.
+//   * Draft dimensions (status === "draft") are surfaced visually de-emphasised
+//     with a "Draft — activates in Slice 6" label. They carry `weight: 0`
+//     server-side and do not contribute to the composite. Showing them keeps
+//     a portfolio viewer aware they exist in the rubric and aren't simply
+//     missing — distinct from a score of zero on an active dimension.
 //
 // Posture inherited from MLI-186: best-effort fetch, fail to a placeholder
 // rather than blocking the surrounding page. The scoreboard remains usable
@@ -10,18 +24,16 @@
 //
 // `latest_run: null` with `history: []` is a real 200 state (unscored slate
 // candidates such as phi-4-mini-instruct that the dev seed skips, see
-// mmfp/api/candidate_detail.py:14). The empty state is handled here rather
-// than treated as an error.
-//
-// The detail panel labels the run with its `completed_at` ("as of …") rather
-// than "latest" globally — the API walks back to the most recent run that
-// contains *this* candidate, which may be older than the product's latest
-// scoreboard run.
+// mmfp/api/candidate_detail.py:14). The empty state still renders the rubric
+// dimensions so a portfolio viewer can see the rubric shape against a
+// not-yet-scored candidate.
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   CandidateDetail as CandidateDetailType,
   Family,
+  RubricDimension,
+  RubricTier,
   TierId,
   WireCandidateDetail,
   parseCandidateDetail,
@@ -200,46 +212,87 @@ function LoadedBody({
   detail: CandidateDetailType;
   tierId: TierId;
 }) {
+  const rubricTier = useMemo(
+    () => detail.rubric.tiers.find((t) => t.tier_id === tierId) ?? null,
+    [detail.rubric, tierId],
+  );
   const tierResult =
     detail.latest_run?.per_tier.find((pt) => pt.tier_id === tierId) ?? null;
 
-  if (!detail.latest_run || !tierResult) {
+  // The rubric is the source of truth for which dimensions to render; the
+  // run only supplies the scores. If the rubric has no entry for this tier
+  // we have nothing to draw — defensive, shouldn't happen in practice.
+  if (!rubricTier) {
     return (
       <p
         data-testid="candidate-detail-empty"
         className="text-sm text-neutral-5"
       >
-        No scoring data yet for this candidate.
+        No rubric configuration for this tier.
       </p>
     );
   }
 
-  // Dimension order: stable on the API key order. Decimal keys arrive in
-  // insertion order, which matches the rubric for the tier.
-  const dimensions = Object.entries(tierResult.per_dimension);
+  const perDimension = tierResult?.per_dimension ?? {};
+  const hasRun = detail.latest_run !== null && tierResult !== null;
 
   return (
     <>
-      <RunStamp
-        completedAt={detail.latest_run.completed_at}
-        startedAt={detail.latest_run.started_at}
-        rubricVersion={detail.latest_run.rubric_version}
-      />
+      {hasRun && detail.latest_run ? (
+        <RunStamp
+          completedAt={detail.latest_run.completed_at}
+          startedAt={detail.latest_run.started_at}
+          rubricVersion={detail.latest_run.rubric_version}
+        />
+      ) : (
+        <UnscoredStamp rubricVersion={detail.rubric.version} />
+      )}
       <h3 className="text-xs font-semibold text-neutral-6 uppercase tracking-wide mb-2 mt-4">
         Per-dimension breakdown
       </h3>
-      <div data-testid="candidate-detail-dimensions" className="flex flex-col gap-1.5">
-        {dimensions.map(([dim, score]) => (
-          <DimensionRow key={dim} dimension={dim} score={score} />
+      <DimensionTableHeader />
+      <div data-testid="candidate-detail-dimensions" className="flex flex-col">
+        {rubricTier.dimensions.map((dim) => (
+          <DimensionRow
+            key={dim.id}
+            dimension={dim}
+            score={perDimension[dim.id]}
+          />
         ))}
       </div>
       <div className="mt-4 pt-3 border-t border-neutral-12 text-xs text-neutral-6 flex items-center justify-between">
-        <span>Tier total</span>
-        <span className="font-mono font-semibold text-neutral-1">
-          {tierResult.weighted_score.toFixed(1)}
+        <span>Tier composite</span>
+        <span
+          data-testid="candidate-detail-composite"
+          className="font-mono font-semibold text-neutral-1"
+        >
+          {hasRun && tierResult
+            ? tierResult.weighted_score.toFixed(1)
+            : "—"}
         </span>
       </div>
     </>
+  );
+}
+
+function UnscoredStamp({ rubricVersion }: { rubricVersion: string }) {
+  return (
+    <p className="text-xs text-neutral-6" data-testid="candidate-detail-empty">
+      No scoring data yet for this candidate.
+      {" · rubric "}
+      <span className="text-neutral-3 font-mono">{rubricVersion}</span>
+    </p>
+  );
+}
+
+function DimensionTableHeader() {
+  return (
+    <div className="grid grid-cols-[1fr_3.5rem_3.5rem_3.5rem] gap-2 text-[10px] uppercase tracking-wide text-neutral-6 font-semibold pb-1 border-b border-neutral-12">
+      <span>Dimension</span>
+      <span className="text-right">Weight</span>
+      <span className="text-right">Score</span>
+      <span className="text-right">w × s</span>
+    </div>
   );
 }
 
@@ -266,25 +319,65 @@ function RunStamp({
   );
 }
 
-function DimensionRow({ dimension, score }: { dimension: string; score: number }) {
-  const clamped = Math.max(0, Math.min(100, score));
+function DimensionRow({
+  dimension,
+  score,
+}: {
+  dimension: RubricDimension;
+  score: number | undefined;
+}) {
+  const isDraft = dimension.status === "draft";
+  const hasScore = typeof score === "number" && Number.isFinite(score);
+  // Active dimensions: contribution to the (active-weight-normalised) tier
+  // composite is (weight * score) / 100. The engine normalises by the active
+  // weight total (MLI-269), so contributions sum to the displayed composite.
+  // Drafts carry weight 0 server-side, so contribution is 0 regardless.
+  const contribution =
+    !isDraft && hasScore ? (dimension.weight * score!) / 100 : null;
+
+  // Weight format: integer-style for tidy display (35%); the rubric never
+  // declares fractional weights at v0.1 but we render whatever the API
+  // returned via parseFloat — toLocaleString without minimumFractionDigits
+  // collapses "35.0" to "35".
+  const weightLabel = `${dimension.weight}%`;
+
+  const rowTone = isDraft ? "text-neutral-6" : "text-neutral-3";
+  const valueTone = isDraft
+    ? "text-neutral-6 font-normal"
+    : "text-neutral-1 font-semibold";
+
   return (
     <div
       data-testid="dimension-row"
-      className="grid grid-cols-[1.4fr_3rem_1fr] items-center gap-3 text-xs"
+      data-dimension-id={dimension.id}
+      data-dimension-status={dimension.status}
+      className={`grid grid-cols-[1fr_3.5rem_3.5rem_3.5rem] items-baseline gap-2 text-xs py-1.5 border-b border-neutral-12 last:border-b-0 ${rowTone}`}
     >
-      <span className="text-neutral-3 truncate" title={dimension}>
-        {dimension}
+      <span className="min-w-0">
+        <span className="truncate block" title={dimension.description}>
+          {dimension.name}
+        </span>
+        {isDraft && (
+          <span
+            data-testid="dimension-draft-label"
+            className="text-[10px] text-neutral-6 italic block mt-0.5"
+          >
+            Draft — activates in Slice 6
+          </span>
+        )}
       </span>
-      <span className="font-mono text-right font-semibold text-neutral-1">
-        {score.toFixed(1)}
+      <span
+        data-testid={`dim-weight-${dimension.id}`}
+        className={`font-mono text-right ${valueTone}`}
+      >
+        {weightLabel}
       </span>
-      <div className="h-1.5 bg-neutral-12 rounded overflow-hidden">
-        <div
-          className="h-full bg-neutral-4"
-          style={{ width: `${clamped}%` }}
-        />
-      </div>
+      <span className={`font-mono text-right ${valueTone}`}>
+        {isDraft ? "—" : hasScore ? score!.toFixed(1) : "—"}
+      </span>
+      <span className={`font-mono text-right ${valueTone}`}>
+        {contribution !== null ? contribution.toFixed(1) : "—"}
+      </span>
     </div>
   );
 }

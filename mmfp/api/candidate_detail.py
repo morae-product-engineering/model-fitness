@@ -6,6 +6,11 @@ Returns the candidate's slate metadata plus:
     this candidate (None if no run ever did).
   * `history`: last N runs' per-tier aggregate scores (newest first; only the
     runs that contain this candidate appear).
+  * `rubric`: the live rubric's per-tier dimension list (active + draft),
+    inlined so the CandidateDetail UI can render weight × score breakdowns
+    in one round-trip. Per the MLI-267 architectural-input from MLI-274;
+    `rubric.version` is also the source the Slice 4 Editor will use as its
+    `expected_version` for the rubric write endpoint (MLI-273).
 
 Lookup is by `binding.deployment` rather than the slate `id` — that matches
 the value the scoreboard endpoint surfaces and the URL form the UI uses to
@@ -23,8 +28,10 @@ Convention notes:
 
 from __future__ import annotations
 
+import os
 from collections.abc import Callable
 from decimal import Decimal
+from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -39,7 +46,9 @@ from mmfp.models.candidate import (
     TierId,
 )
 from mmfp.models.matrix_run import MatrixRun
+from mmfp.models.rubric import Direction, DimensionStatus, Method, Rubric
 from mmfp.persistence import MatrixRunRepository
+from mmfp.products.loader import load_rubric
 
 router = APIRouter(tags=["candidate-detail"])
 
@@ -77,6 +86,42 @@ class CandidateHistoryEntry(BaseModel):
     per_tier_scores: dict[TierId, Decimal]
 
 
+class RubricDimensionView(BaseModel):
+    """The slice of `Dimension` the candidate-detail UI renders.
+
+    Deliberately narrower than `mmfp.models.rubric.Dimension`: the full model
+    carries `evaluator` and `evaluator_config` for the engine, which are not
+    surface for the modal. Trimming the payload at the boundary keeps the
+    rubric block small and makes it obvious which fields the UI depends on.
+    """
+
+    id: str
+    name: str
+    description: str
+    weight: Decimal
+    status: DimensionStatus
+    method: Method
+    direction: Direction
+
+
+class RubricTierView(BaseModel):
+    tier_id: TierId
+    name: str
+    dimensions: list[RubricDimensionView]
+
+
+class RubricView(BaseModel):
+    """The rubric as the candidate-detail UI consumes it.
+
+    `version` is the same field the Slice 4 Editor will pass back as
+    `expected_version` to the rubric write endpoint (MLI-273); inlining it
+    here means the Editor doesn't need a second fetch to seed its handshake.
+    """
+
+    version: str
+    tiers: list[RubricTierView]
+
+
 class CandidateDetailResponse(BaseModel):
     product: str
     candidate_id: str
@@ -87,11 +132,68 @@ class CandidateDetailResponse(BaseModel):
     tiers: list[TierId]
     latest_run: CandidateLatestRun | None
     history: list[CandidateHistoryEntry]
+    rubric: RubricView
+
+
+# ---------------------------------------------------------------------------
+# Dependencies
+# ---------------------------------------------------------------------------
+
+
+def get_rubric_loader() -> Callable[[str], Rubric]:
+    """Provide a callable that loads a product's rubric.
+
+    Same `MMFP_PRODUCTS_DIR` convention as the candidate-slate loader in
+    `scoreboard.py` and the write endpoint in `rubric_write.py` — single
+    source of truth for env-var resolution. `FileNotFoundError` from the
+    loader signals an unknown product (mapped to 404 by the route).
+    """
+    products_dir = Path(os.environ.get("MMFP_PRODUCTS_DIR", "products"))
+
+    def _load(product: str) -> Rubric:
+        rubric_path = products_dir / product / "rubric.yaml"
+        if not rubric_path.exists():
+            raise FileNotFoundError(f"rubric.yaml not found at {rubric_path}")
+        return load_rubric(rubric_path)
+
+    return _load
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+def _rubric_view(rubric: Rubric) -> RubricView:
+    """Project the full `Rubric` model into the trimmed UI-facing view.
+
+    Preserves the rubric's declaration order so the modal renders dimensions
+    in the same order the steward sees them in the YAML (active and draft
+    interleaved). The component is responsible for visually grouping or
+    de-emphasising drafts.
+    """
+    return RubricView(
+        version=rubric.version,
+        tiers=[
+            RubricTierView(
+                tier_id=t.id,
+                name=t.name,
+                dimensions=[
+                    RubricDimensionView(
+                        id=d.id,
+                        name=d.name,
+                        description=d.description,
+                        weight=d.weight,
+                        status=d.status,
+                        method=d.method,
+                        direction=d.direction,
+                    )
+                    for d in t.dimensions
+                ],
+            )
+            for t in rubric.tiers
+        ],
+    )
 
 
 def _candidate_tier_results(
@@ -133,6 +235,7 @@ def get_candidate_detail(
     candidate_loader: Annotated[
         Callable[[str], list[Candidate]], Depends(get_candidate_loader)
     ],
+    rubric_loader: Annotated[Callable[[str], Rubric], Depends(get_rubric_loader)],
     runs: Annotated[
         int,
         Query(
@@ -150,6 +253,14 @@ def get_candidate_detail(
     """
     try:
         candidates = candidate_loader(product)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail=f"Unknown product '{product}'")
+
+    # Rubric.load is the same path the rubric-write endpoint validates against,
+    # so the version returned here is the version a Slice 4 Editor would have
+    # to send as `expected_version`.
+    try:
+        rubric = rubric_loader(product)
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail=f"Unknown product '{product}'")
 
@@ -201,4 +312,5 @@ def get_candidate_detail(
         tiers=candidate.tiers,
         latest_run=latest_run,
         history=history,
+        rubric=_rubric_view(rubric),
     )

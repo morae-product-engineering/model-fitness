@@ -21,9 +21,77 @@ from mmfp.models.candidate import (
     CandidateStatus,
 )
 from mmfp.models.matrix_run import EvaluatorScore, MatrixRun, MatrixRunResult, SourceField
+from mmfp.models.rubric import (
+    Dimension,
+    Direction,
+    JudgeConfig,
+    Method,
+    Rubric,
+    Tier,
+)
 from mmfp.persistence import MatrixRunRepository
 
 _RUN_ANCHOR = datetime(2026, 5, 10, 12, 0, 0, tzinfo=timezone.utc)
+
+
+def _judge_config() -> JudgeConfig:
+    return JudgeConfig(
+        model="claude-sonnet-4-5",
+        provider="anthropic",
+        version_pin="2025-10-01",
+        calibration_set="products/test/datasets/judge_calibration.jsonl",
+    )
+
+
+def _stub_rubric(
+    *,
+    tier_id: str = "tier_1",
+    tier_name: str = "Classification & Routing",
+    dimensions: list[Dimension] | None = None,
+    version: str = "v0.1",
+) -> Rubric:
+    """Minimal rubric for the candidate-detail rubric inlining tests.
+
+    Defaults to a single-tier rubric whose dimension ids match the matrix-run
+    result fixtures elsewhere in this file (`t1.accuracy`, `t1.latency`),
+    so the existing happy-path tests round-trip without retyping result data.
+    """
+    if dimensions is None:
+        dimensions = [
+            Dimension(
+                id="t1.accuracy",
+                name="Accuracy",
+                description="Exact-match accuracy on the golden labels",
+                weight=Decimal("75"),
+                status="active",
+                method=Method.DETERMINISTIC,
+                direction=Direction.HIGHER_IS_BETTER,
+                evaluator="exact_match",
+            ),
+            Dimension(
+                id="t1.latency",
+                name="Latency",
+                description="Per-call latency proxy",
+                weight=Decimal("25"),
+                status="active",
+                method=Method.METRIC,
+                direction=Direction.LOWER_IS_BETTER,
+                evaluator="latency_p95",
+            ),
+        ]
+    return Rubric(
+        version=version,
+        tiers=[
+            Tier(
+                id=tier_id,
+                name=tier_name,
+                intent="Test rubric",
+                mode="single_turn",
+                dimensions=dimensions,
+            )
+        ],
+        judge=_judge_config(),
+    )
 
 
 def _score(
@@ -109,6 +177,7 @@ def _make_client(
     tmp_path: Path,
     candidates: list[Candidate],
     runs_in_save_order: list[tuple[MatrixRun, str]],
+    rubric: Rubric | None = None,
 ) -> tuple[TestClient, MatrixRunRepository]:
     """Save the runs, then back-date `created_at` to each run's `started_at`.
 
@@ -142,6 +211,10 @@ def _make_client(
         app.dependency_overrides[candidate_detail.get_candidate_loader] = (
             lambda: (lambda product: candidates)  # noqa: ARG005
         )
+    rubric_for_test = rubric if rubric is not None else _stub_rubric()
+    app.dependency_overrides[candidate_detail.get_rubric_loader] = (
+        lambda: (lambda product: rubric_for_test)  # noqa: ARG005
+    )
 
     return TestClient(app, raise_server_exceptions=True), repo
 
@@ -394,7 +467,7 @@ def test_candidate_detail_decimal_rendered_as_string(tmp_path: Path) -> None:
 
 
 def test_candidate_detail_404_unknown_product(tmp_path: Path) -> None:
-    from mmfp.api import scoreboard
+    from mmfp.api import candidate_detail, scoreboard
     from mmfp.api.main import app
 
     repo = MatrixRunRepository(tmp_path / "empty.db")
@@ -405,14 +478,21 @@ def test_candidate_detail_404_unknown_product(tmp_path: Path) -> None:
 
         return _loader
 
+    def _override_rubric_loader() -> Callable[[str], Rubric]:
+        def _loader(product: str) -> Rubric:
+            raise FileNotFoundError(f"no rubric for {product}")
+
+        return _loader
+
     app.dependency_overrides[scoreboard.get_repository] = lambda: repo
     app.dependency_overrides[scoreboard.get_candidate_loader] = _override_loader
+    app.dependency_overrides[candidate_detail.get_rubric_loader] = _override_rubric_loader
 
     client = TestClient(app)
     try:
         resp = client.get("/api/products/unknown/candidates/Whatever")
         assert resp.status_code == 404
-        assert "unknown" in resp.json()["detail"]
+        assert "unknown" in resp.json()["detail"].lower()
     finally:
         app.dependency_overrides.clear()
 
@@ -450,6 +530,136 @@ def test_candidate_detail_runs_bounds_validation(tmp_path: Path) -> None:
             client.get("/api/products/mli/candidates/Deploy-One?runs=-3").status_code
             == 422
         )
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_candidate_detail_inlines_rubric_for_active_and_draft_dimensions(
+    tmp_path: Path,
+) -> None:
+    """The response includes the rubric view: version + per-tier dimensions.
+
+    Both active and draft dimensions are surfaced (the modal renders drafts
+    de-emphasised, not hidden) and `weight` arrives as a Decimal string so
+    the UI boundary function parses it consistently with other Decimal
+    fields. MLI-274 — architectural-input on MLI-267 (this sub-task) records
+    the inlining choice.
+    """
+    from mmfp.api.main import app
+
+    rubric = _stub_rubric(
+        tier_id="tier_1",
+        tier_name="Classification & Routing",
+        dimensions=[
+            Dimension(
+                id="classification_accuracy",
+                name="Classification accuracy",
+                description="JSON-label accuracy",
+                weight=Decimal("35"),
+                status="active",
+                method=Method.DETERMINISTIC,
+                direction=Direction.HIGHER_IS_BETTER,
+                evaluator="regex_match",
+            ),
+            Dimension(
+                id="confidence_calibration",
+                name="Confidence calibration",
+                description="Inverted Brier",
+                weight=Decimal("65"),
+                status="active",
+                method=Method.DETERMINISTIC,
+                direction=Direction.HIGHER_IS_BETTER,
+                evaluator="confidence_calibration",
+            ),
+            Dimension(
+                id="synthesis_quality_draft",
+                name="Synthesis quality",
+                description="LLM-judge — Slice 6",
+                weight=Decimal("0"),
+                status="draft",
+                method=Method.LLM_JUDGE,
+                direction=Direction.HIGHER_IS_BETTER,
+                evaluator="llm_judge_synthesis_quality",
+            ),
+        ],
+        version="v0.1",
+    )
+    c1 = _candidate(cid="c1", tiers=["tier_1"], deployment="Deploy-One")
+    run = _run(
+        run_id="run-1",
+        offset_days=0,
+        results=[
+            _result(
+                candidate_id="c1",
+                dimension_id="classification_accuracy",
+                normalized_score=Decimal("90.000"),
+            )
+        ],
+    )
+
+    client, _ = _make_client(tmp_path, [c1], [(run, "mli")], rubric=rubric)
+    try:
+        resp = client.get("/api/products/mli/candidates/Deploy-One")
+        assert resp.status_code == 200
+        body = resp.json()
+
+        rubric_block = body["rubric"]
+        assert rubric_block["version"] == "v0.1"
+        assert len(rubric_block["tiers"]) == 1
+        tier = rubric_block["tiers"][0]
+        assert tier["tier_id"] == "tier_1"
+        assert tier["name"] == "Classification & Routing"
+
+        dims = tier["dimensions"]
+        # Declaration order is preserved — active and draft interleaved.
+        assert [d["id"] for d in dims] == [
+            "classification_accuracy",
+            "confidence_calibration",
+            "synthesis_quality_draft",
+        ]
+        # The weight that drives the dim-weight-<id> testid in the UI.
+        assert dims[0]["weight"] == "35"
+        assert dims[0]["status"] == "active"
+        # Draft is present, de-emphasis is the UI's job.
+        draft = dims[-1]
+        assert draft["status"] == "draft"
+        assert draft["weight"] == "0"
+        # Method + direction round-trip so the UI can format unit semantics.
+        assert dims[0]["method"] == "deterministic"
+        assert dims[0]["direction"] == "higher_is_better"
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_candidate_detail_rubric_present_when_no_scoring_data(tmp_path: Path) -> None:
+    """Empty-state response (latest_run=null) still inlines the rubric.
+
+    The modal renders the dimension list and weights regardless of whether
+    a run has happened yet — a portfolio viewer landing on a never-scored
+    candidate (the phi-4-mini-instruct path) still sees the rubric shape.
+    """
+    from mmfp.api.main import app
+
+    c1 = _candidate(cid="c1", tiers=["tier_1"], deployment="Phi-4-mini-instruct")
+    run = _run(
+        run_id="run-other",
+        offset_days=0,
+        results=[_result(candidate_id="other", dimension_id="t1.accuracy")],
+    )
+
+    client, _ = _make_client(
+        tmp_path,
+        [c1, _candidate(cid="other", tiers=["tier_1"], deployment="Other-Deploy")],
+        [(run, "mli")],
+    )
+    try:
+        resp = client.get("/api/products/mli/candidates/Phi-4-mini-instruct")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["latest_run"] is None
+        assert body["rubric"]["version"] == "v0.1"
+        assert body["rubric"]["tiers"][0]["tier_id"] == "tier_1"
+        assert len(body["rubric"]["tiers"][0]["dimensions"]) == 2
     finally:
         app.dependency_overrides.clear()
 
