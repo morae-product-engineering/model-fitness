@@ -19,7 +19,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-from mmfp.api import candidate_detail, scoreboard, trends
+from mmfp.api import candidate_detail, rubric_write, scoreboard, trends
 from mmfp.api.seed import download_seed_if_configured
 
 CORS_ORIGINS_ENV = "MMFP_CORS_ALLOWED_ORIGINS"
@@ -59,7 +59,7 @@ app.add_middleware(
         os.environ.get(CORS_ORIGINS_ENV, _DEFAULT_LOCAL_ORIGIN)
     ),
     allow_credentials=False,
-    allow_methods=["GET", "OPTIONS"],
+    allow_methods=["GET", "PUT", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -114,3 +114,4 @@ def get_skeleton_run() -> MatrixRunResponse:
 app.include_router(scoreboard.router)
 app.include_router(trends.router)
 app.include_router(candidate_detail.router)
+app.include_router(rubric_write.router)
