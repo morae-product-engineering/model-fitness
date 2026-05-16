@@ -46,7 +46,7 @@ from mmfp.models.candidate import (
     TierId,
 )
 from mmfp.models.matrix_run import MatrixRun
-from mmfp.models.rubric import Direction, DimensionStatus, Method, Rubric
+from mmfp.models.rubric import DimensionStatus, Direction, Method, Rubric
 from mmfp.persistence import MatrixRunRepository
 from mmfp.products.loader import load_rubric
 
