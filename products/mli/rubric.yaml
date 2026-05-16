@@ -1,14 +1,33 @@
-# MLI rubric v0.1 — first concrete rubric for the Morae Legal Intelligence
-# product. Reference: https://morae.atlassian.net/wiki/spaces/MLI/pages/218628525
+# MLI rubric v0.1 — aligned to the v0.1 reference document (MLI-267).
+# Reference: https://morae.atlassian.net/wiki/spaces/MLI/pages/218628525
 #
-# Three tiers, each with deterministic evaluators only in v0.1. Tier 3 uses
-# regex/json_schema as a stand-in for the LLM judge that lands with Slice 6;
-# this is documented in KNOWN_GAPS.md and surfaces in the rubric as
-# `judge` placeholder config (no judge runs on the matrix engine yet).
+# Three tiers, partitioned per Dimension by `status`:
+#   - `active`: scored in v0.1; the matrix engine dispatches to the evaluator
+#     and the dimension contributes to the rubric-weighted aggregate.
+#   - `draft`: declared so the YAML shape matches the v0.1 reference doc, but
+#     its evaluator family (LLM-judge, composite, qualitative) doesn't ship
+#     until Slice 6 (MLI-219+). Per MLI-267 architectural-input from MLI-269
+#     drafts carry `weight: 0` so the YAML can't grow a "this 25 doesn't
+#     count" footgun.
 #
-# Per-dimension `evaluator` references the registered EvaluatorPlugin name
-# (mmfp/evaluators/_registry.py). Loader derives the engine's
+# Active-weight totals per tier (sum of `weight` over active dimensions):
+#   Tier 1 = 100   (5 active, 0 draft — fully realised in v0.1)
+#   Tier 2 = 80    (5 active, 2 draft — composite + qualitative deferred)
+#   Tier 3 = 20    (2 active, 5 draft — judge + composite deferred)
+# The matrix engine normalises weighted scores by the per-tier active total
+# (MLI-269), so Tier 3 still produces 0–100 scores from its sparse active
+# coverage rather than artificially-compressed ones.
+#
+# Per-dimension `evaluator` references the EvaluatorPlugin name registered
+# in `mmfp/evaluators/_registry.py`. The loader derives the engine's
 # `dimension_evaluators` mapping from these — single source of truth.
+# Draft dimensions name their intended future evaluator as documentary
+# intent; the engine never dispatches to them (MLI-269).
+#
+# Per-dimension `evaluator_config` is a free-form dict the matrix engine
+# merges into `context['evaluator_config']` before dispatch (MLI-272 / the
+# MLI-270 architectural-input on MLI-267). Each evaluator validates its
+# own shape; the Dimension model treats it as opaque.
 
 schema_version: v1
 version: v0.1
@@ -16,83 +35,258 @@ version: v0.1
 tiers:
   - id: tier_1
     name: Classification & Routing
-    intent: Classify legal text or route requests to the right downstream skill
+    intent: Reliability instrument — cheap, fast, consistent structured output
     mode: single_turn
+    # All five reference dimensions are active in v0.1. Prompts are designed
+    # to elicit a single JSON response shape `{"label": "<value>", "confidence":
+    # <0..1>}` so the engine's "one binding call per example, scored across
+    # all active dimensions" architecture (MLI-258) can support all five
+    # evaluators on the same response. The `regex_match` evaluator on
+    # `classification_accuracy` matches the expected label inside that JSON
+    # envelope; this is a v0.1 expedient — the reference method is "exact
+    # match", and a future label-extracting evaluator (or a per-dimension
+    # dataset facility) lands when Slice 6 broadens evaluator families.
     dimensions:
       - id: classification_accuracy
         name: Classification accuracy
-        description: Output label exactly matches the expected category
-        weight: 60
-        method: deterministic
-        direction: higher_is_better
-        evaluator: exact_match
-      - id: routing_validity
-        name: Routing validity
-        description: Output is one of the allowed routing labels
-        weight: 40
+        description: Proportion of inputs whose label inside the candidate's JSON output matches the golden label
+        weight: 35
+        status: active
         method: deterministic
         direction: higher_is_better
         evaluator: regex_match
+
+      - id: structured_output_parse_rate
+        name: Structured-output parse rate
+        description: Proportion of outputs that parse as valid JSON conforming to the {label, confidence} schema
+        weight: 25
+        status: active
+        method: deterministic
+        direction: higher_is_better
+        evaluator: json_schema
+
+      - id: latency_p95
+        name: Latency at p95
+        description: 95th-percentile end-to-end latency for a classification call (mean across examples is a per-call proxy in v0.1)
+        weight: 20
+        status: active
+        method: metric
+        direction: lower_is_better
+        evaluator: latency_p95
+        evaluator_config:
+          reference_p95_ms: 2000
+
+      - id: cost_per_1000_classifications
+        name: Cost per 1,000 classifications
+        description: USD cost to classify 1,000 representative inputs against the reference target
+        weight: 15
+        status: active
+        method: metric
+        direction: lower_is_better
+        evaluator: cost_per_call
+        evaluator_config:
+          reference_usd: 0.005
+          per_calls: 1000
+
+      - id: confidence_calibration
+        name: Confidence calibration
+        description: Inverted Brier score between self-reported confidence and empirical correctness on the golden labels
+        weight: 5
+        status: active
+        method: deterministic
+        direction: higher_is_better
+        evaluator: confidence_calibration
 
   - id: tier_2
-    name: Structured Generation
-    # Two dimensions in v0.1 — one evaluator per dimension. Multiple
-    # dimensions sharing an evaluator would all read the same `expected`
-    # slot and produce identical scores; broaden to per-dimension expected
-    # payloads when the rubric needs more shape (likely with the LLM judge
-    # in Slice 6).
-    intent: Generate JSON conforming to a schema with format-compliant field values
-    mode: single_turn
+    name: Structured Generation & Tool Use
+    intent: Workhorse instrument — reliable SQL/Cypher generation with tool-use fidelity
+    # `multi_turn` is documentary in v0.1: the binding ABC is sync /
+    # single-prompt today (MLI-258), and the matrix engine treats `mode` as
+    # metadata — no branching behaviour on it. Tier 2 prompts elicit a
+    # single SQL statement; the multi-turn framing of the reference doc
+    # lands as a real shape when the binding broadens (Slice 6+).
+    mode: multi_turn
+    # Five active dimensions, two drafts. `structured_output_reliability` is
+    # active per the reference doc but is uniformly-scored in v0.1 (prompts
+    # elicit raw SQL, not JSON tool-call arrays; the evaluator will return 0
+    # for every candidate). Tracked in KNOWN_GAPS.md as a discrimination gap
+    # to close when multi-turn tool-call prompts land alongside the binding
+    # broadening — not a reason to demote the dimension to draft.
     dimensions:
-      - id: schema_validity
-        name: Schema validity
-        description: Output is JSON and validates against the expected schema
-        weight: 60
+      - id: query_correctness
+        name: Generated query correctness
+        description: Proportion of generated SQL queries that execute and return the expected rows against the golden DB
+        weight: 30
+        status: active
         method: deterministic
         direction: higher_is_better
-        evaluator: json_schema
-      - id: format_compliance
-        name: Format compliance
-        description: Output contains a value matching the expected pattern (e.g. ISO date)
-        weight: 40
+        evaluator: query_correctness
+        evaluator_config:
+          golden_db_path: products/mli/datasets/golden_dbs/query_correctness_v0.sql
+
+      - id: structured_output_reliability
+        name: Structured-output reliability
+        description: Parse rate for tool-call JSON and schema conformance across a multi-turn trajectory
+        weight: 20
+        status: active
         method: deterministic
         direction: higher_is_better
-        evaluator: regex_match
+        evaluator: structured_output_reliability
+
+      - id: tool_use_fidelity
+        name: Tool-use fidelity
+        description: Composite — right tool, correct arguments, correct call order, error recovery
+        weight: 0
+        status: draft
+        method: composite
+        direction: higher_is_better
+        evaluator: tool_use_fidelity
+
+      - id: cost_per_completed_query
+        name: Cost per completed query
+        description: USD cost to complete one representative query trajectory against the reference target
+        weight: 15
+        status: active
+        method: metric
+        direction: lower_is_better
+        evaluator: cost_per_call
+        evaluator_config:
+          reference_usd: 0.02
+          per_calls: 1
+
+      - id: latency_p95
+        name: Latency at p95
+        description: 95th-percentile time to complete a representative query trajectory
+        weight: 10
+        status: active
+        method: metric
+        direction: lower_is_better
+        evaluator: latency_p95
+        evaluator_config:
+          reference_p95_ms: 5000
+
+      - id: context_window_adequacy
+        name: Context window adequacy
+        description: Whether the candidate's context window comfortably accommodates the MLI schema + typical query context
+        weight: 5
+        status: active
+        method: deterministic
+        direction: higher_is_better
+        evaluator: context_window_adequacy
+        evaluator_config:
+          # Representative Tier 2 budget: ~4k for schema + system + tool
+          # definitions, ~2k for the typical user query, ~2k reserved for
+          # the generated SQL output. Stewards keep the breakdown in this
+          # comment; the evaluator only needs the sum.
+          required_tokens: 8000
+
+      - id: fine_tuneability_signal
+        name: Fine-tuneability signal
+        description: Composite — availability, training cost, operational complexity. Recognises the advantage of custom-trained candidates
+        weight: 0
+        status: draft
+        method: qualitative
+        direction: higher_is_better
+        evaluator: fine_tuneability_signal
 
   - id: tier_3
-    name: Synthesis
-    # v0.1 limitation: no LLM judge yet — Slice 6 (MLI-219+) introduces it.
-    # The two deterministic dimensions below approximate qualitative review
-    # without producing misleading scores. Recorded in KNOWN_GAPS.md.
-    intent: Synthesise a structured legal answer with citations and recommendations
-    mode: single_turn
+    name: Synthesis & Client-Facing Reasoning
+    intent: Quality instrument — synthesis quality and reasoning for LCS users
+    mode: multi_turn
+    # Two active dimensions (envelope: latency + cost); five drafts pending
+    # the LLM-judge and composite evaluator families (Slice 6). With 20%
+    # active weight, the matrix engine normalises against the active total
+    # so Tier 3 still produces 0–100 scores from its sparse coverage.
     dimensions:
-      - id: citation_presence
-        name: Citation presence
-        description: Output cites a section or authority matching the expected pattern
-        weight: 60
-        method: deterministic
+      - id: synthesis_quality
+        name: Synthesis quality
+        description: LLM-judge score on clarity, completeness, structure, audience-appropriateness for LCS users
+        weight: 0
+        status: draft
+        method: llm_judge
         direction: higher_is_better
-        evaluator: regex_match
-      - id: structural_completeness
-        name: Structural completeness
-        description: Output is JSON with summary / citations / recommendations sections
-        weight: 40
-        method: deterministic
+        evaluator: llm_judge_synthesis_quality
+
+      - id: factual_faithfulness
+        name: Factual faithfulness to retrieved context
+        description: Whether the synthesis stays within what the agent retrieved (hallucination detector)
+        weight: 0
+        status: draft
+        method: llm_judge
         direction: higher_is_better
-        evaluator: json_schema
+        evaluator: llm_judge_factual_faithfulness
+
+      - id: multi_turn_trajectory_coherence
+        name: Multi-turn trajectory coherence
+        description: Composite — agent carries context across turns, resolves references, builds on prior retrievals
+        weight: 0
+        status: draft
+        method: composite
+        direction: higher_is_better
+        evaluator: multi_turn_trajectory_coherence
+
+      - id: tool_use_fidelity
+        name: Tool-use fidelity across trajectory
+        description: Composite (as Tier 2) applied across longer trajectories
+        weight: 0
+        status: draft
+        method: composite
+        direction: higher_is_better
+        evaluator: tool_use_fidelity
+
+      - id: latency_p95
+        name: Latency at p95
+        description: 95th-percentile end-to-end time for a complete client-facing interaction
+        weight: 10
+        status: active
+        method: metric
+        direction: lower_is_better
+        evaluator: latency_p95
+        evaluator_config:
+          reference_p95_ms: 10000
+
+      - id: cost_per_completed_interaction
+        name: Cost per completed interaction
+        description: USD cost for one representative multi-turn interaction, end-to-end
+        weight: 10
+        status: active
+        method: metric
+        direction: lower_is_better
+        evaluator: cost_per_call
+        evaluator_config:
+          reference_usd: 0.05
+          per_calls: 1
+
+      - id: ethical_wall_safety
+        name: Ethical wall and safety adherence
+        description: Composite — refuses cross-wall queries, redacts appropriately, no tenant leakage under multi-turn pressure
+        weight: 0
+        status: draft
+        method: composite
+        direction: higher_is_better
+        evaluator: ethical_wall_safety
 
 gates:
-  - id: gate.compliance.eu_residency
-    description: Provider must keep request and response data in the EU
-    applies_to_tiers: []  # all tiers
-  - id: gate.compliance.no_training_on_data
-    description: Provider must not train on Morae prompts or completions
+  - id: gate.compliance.soc2
+    description: Provider holds current SOC 2 Type II, or self-hosted candidate runs in a SOC 2 in-scope environment
     applies_to_tiers: []
+  - id: gate.residency.azure_hostable
+    description: Candidate is deployable via Azure AI Foundry or Azure ML in UK South or equivalent EU region
+    applies_to_tiers: []
+  - id: gate.retention.zero_option
+    description: Provider offers a zero-retention or customer-controlled retention configuration
+    applies_to_tiers: []
+  - id: gate.licence.commercial_use
+    description: Model licence permits commercial inference for Morae clients
+    applies_to_tiers: []
+  - id: gate.tool_use.supported
+    description: Candidate supports structured tool / function calling as a native capability
+    applies_to_tiers: [tier_2, tier_3]
 
-# Placeholder: configured but not yet executed. The LLM judge plugin is
-# Slice 6 territory (MLI-219+); Tier 3 dimensions in v0.1 use the
-# deterministic evaluators above. KNOWN_GAPS.md tracks the gap.
+# Placeholder until Slice 6 wires the LLM-judge plugin (MLI-219+). The
+# `provider` value is preserved unchanged from the prior rubric — the
+# Anthropic vs Azure AI Foundry decision is out of scope for this slice
+# and tracked separately. KNOWN_GAPS.md tracks the judge-runtime gap.
 judge:
   model: claude-sonnet-4-5
   provider: anthropic

@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 from enum import Enum
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field, HttpUrl, model_validator
 
@@ -102,7 +102,24 @@ class Dimension(BaseModel):
         min_length=1,
         description=(
             "Registered evaluator name (e.g. 'exact_match', 'json_schema'); "
-            "must match a key in the EvaluatorPlugin registry."
+            "must match a key in the EvaluatorPlugin registry for active "
+            "dimensions. Draft dimensions may name a not-yet-registered "
+            "evaluator as documentary intent (the engine never dispatches "
+            "to a draft dimension, so registry membership is enforced at "
+            "load time only for the active partition)."
+        ),
+    )
+    evaluator_config: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "Free-form per-evaluator config (e.g. `reference_p95_ms` for "
+            "`latency_p95`, `reference_usd` + `per_calls` for `cost_per_call`, "
+            "`golden_db_path` for `query_correctness`, `required_tokens` for "
+            "`context_window_adequacy`). The matrix engine merges this into "
+            "`context['evaluator_config']` before dispatch; each evaluator "
+            "validates its own shape. Per MLI-267 architectural-input from "
+            "MLI-270 — keeps Dimension a stable boundary while letting new "
+            "evaluator families add config keys without model churn."
         ),
     )
 

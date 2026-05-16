@@ -96,6 +96,16 @@ class Candidate(BaseModel):
             "reasoning trace before visible content emits — see MLI-165 §1."
         ),
     )
+    context_window: int = Field(
+        gt=0,
+        description=(
+            "Total context window in tokens (prompt + completion). Required, no default — "
+            "the `context_window_adequacy` evaluator consults this to decide whether a "
+            "candidate's window fits the dimension's representative budget, and inferring "
+            "it from the deployment name is fragile. Distinct from `max_tokens`, which is "
+            "the per-call completion budget."
+        ),
+    )
     binding: CandidateBinding
     # Tier candidacy is recorded once, here. MLI-166's tagging is for
     # discoverability; tier-fit lives only in the candidate slate per

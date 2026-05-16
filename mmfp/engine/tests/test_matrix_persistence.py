@@ -88,6 +88,7 @@ def _candidate(id: str = "c1") -> Candidate:
         display_name=id,
         family=CandidateFamily.CHAT,
         max_tokens=256,
+        context_window=128000,  # MLI-272: Candidate.context_window now required.
         tiers=["tier_1"],
         binding=CandidateBinding(
             provider="azure_foundry",

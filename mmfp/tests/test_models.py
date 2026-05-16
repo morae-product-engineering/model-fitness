@@ -94,6 +94,7 @@ def _candidate() -> Candidate:
         display_name="Kimi K2.6",
         family=CandidateFamily.REASONING,
         max_tokens=4096,
+        context_window=128000,  # MLI-272: Candidate.context_window now required.
         tiers=["tier_1"],
         binding=CandidateBinding(
             provider="azure_foundry",
@@ -273,6 +274,7 @@ def test_extra_fields_forbidden() -> None:
                 "display_name": "c",
                 "family": "chat",
                 "max_tokens": 100,
+                "context_window": 128000,  # MLI-272: now required on Candidate.
                 "tiers": ["tier_1"],
                 "binding": {
                     "provider": "azure_foundry",

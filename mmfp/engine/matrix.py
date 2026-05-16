@@ -520,6 +520,7 @@ class MatrixEngine:
                 tier_id=tier.id,
                 candidate=candidate,
                 example_id=example.id,
+                response=response,
             )
 
         return MatrixRunResult(
@@ -567,14 +568,27 @@ class MatrixEngine:
         tier_id: str,
         candidate: Candidate,
         example_id: str,
+        response: BindingResponse,
     ) -> EvaluatorScore:
+        # MLI-272: metric / envelope evaluators read from `context`, not from
+        # `candidate_output` — populated here so a dimension never has to know
+        # the binding shape. `cost_usd` is a defensive 0 placeholder: the
+        # binding doesn't emit cost today (KNOWN_GAPS tracks the open work).
+        # The 0 value means `cost_per_call` returns "≤ reference → 100" for
+        # every candidate; that flattens the cost dimension's discrimination
+        # until a cost sensor/binding extension lands.
+        eval_context: dict[str, Any] = {
+            "dimension_id": dimension.id,
+            "evaluator_id": evaluator.name,
+            "evaluator_config": dimension.evaluator_config or {},
+            "latency_ms": response.latency_ms,
+            "candidate_context_window": candidate.context_window,
+            "cost_usd": Decimal("0"),
+        }
+
         @traceable(name="evaluator.evaluate", run_type="tool")
         def _do_eval() -> EvaluatorScore:
-            return evaluator.evaluate(
-                candidate_output,
-                expected,
-                {"dimension_id": dimension.id, "evaluator_id": evaluator.name},
-            )
+            return evaluator.evaluate(candidate_output, expected, eval_context)
 
         try:
             return _do_eval(

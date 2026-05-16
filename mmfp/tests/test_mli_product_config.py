@@ -22,16 +22,31 @@ from mmfp.plugins.binding import BindingPlugin
 def test_rubric_parses_cleanly(real_rubric: Rubric) -> None:
     assert real_rubric.version == "v0.1"
     assert {t.id for t in real_rubric.tiers} == {"tier_1", "tier_2", "tier_3"}
-    # Per-tier weights sum check is enforced by the model validator;
-    # asserting it here documents the contract for the rubric author.
+    # MLI-272: weight contract is now "active partition sums to (0, 100]"
+    # rather than "all dimensions sum to 100". Draft dimensions carry
+    # weight 0 per the MLI-269 architectural-input. v0.1 active totals:
+    # tier_1=100 (5/5 active), tier_2=80 (5/7 active), tier_3=20 (2/7 active).
+    expected_active_totals = {"tier_1": 100, "tier_2": 80, "tier_3": 20}
     for tier in real_rubric.tiers:
-        total = sum(d.weight for d in tier.dimensions)
-        assert total == 100, f"tier {tier.id} weights must sum to 100, got {total}"
+        active_total = sum(d.weight for d in tier.active_dimensions())
+        assert active_total == expected_active_totals[tier.id], (
+            f"tier {tier.id} active weights must sum to "
+            f"{expected_active_totals[tier.id]}, got {active_total}"
+        )
 
 
 def test_dimension_evaluators_are_registered(real_rubric: Rubric) -> None:
+    # MLI-272: only active dimensions must reference registered evaluators.
+    # Draft dimensions name their intended future evaluator as documentary
+    # intent (Slice 6's LLM-judge / composite families); the engine never
+    # dispatches to them, so registry membership is enforced at load time
+    # only for the active partition.
     known = set(evaluator_registry.names())
-    referenced = {d.evaluator for tier in real_rubric.tiers for d in tier.dimensions}
+    referenced = {
+        d.evaluator
+        for tier in real_rubric.tiers
+        for d in tier.active_dimensions()
+    }
     missing = referenced - known
     assert not missing, f"rubric references unregistered evaluators: {sorted(missing)}"
 
@@ -157,7 +172,11 @@ def test_engine_validates_dimension_coverage_when_mapping_omits_a_dimension(
 
 
 def _all_evaluator_names_used_by(rubric: Rubric) -> set[str]:
-    return {d.evaluator for tier in rubric.tiers for d in tier.dimensions}
+    # MLI-272: scoped to active dimensions — drafts may reference future
+    # evaluator names (LLM-judge, composite) that aren't registered yet.
+    return {
+        d.evaluator for tier in rubric.tiers for d in tier.active_dimensions()
+    }
 
 
 def test_rubric_evaluators_are_a_subset_of_registered(real_rubric: Rubric) -> None:
