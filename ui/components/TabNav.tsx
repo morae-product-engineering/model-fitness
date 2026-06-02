@@ -1,7 +1,7 @@
 // lifted from ui/prototype/shell.jsx:105 (TabNav)
 // All four prototype tabs render so the planned product shape is visible.
-// Only Scoreboard has a route today; Editor/Curator/History are disabled
-// with a tooltip until their routes ship in later slices.
+// Scoreboard, Editor, and Curator have routes; History remains disabled with
+// a tooltip until its route ships in a later slice.
 
 import Link from "next/link";
 
@@ -16,7 +16,7 @@ interface TabSpec {
 const TABS: TabSpec[] = [
   { id: "scoreboard", label: "Scoreboard", href: "/scoreboard?product=mli" },
   { id: "editor", label: "Editor", href: "/editor?product=mli" },
-  { id: "curator", label: "Curator" },
+  { id: "curator", label: "Curator", href: "/curator?product=mli" },
   { id: "history", label: "History" },
 ];
 
