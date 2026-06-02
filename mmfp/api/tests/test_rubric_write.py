@@ -291,6 +291,53 @@ def test_path_traversal_in_product_slug_rejected(products_dir: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Persistence-failure path returns a CORS-carrying structured error (MLI-365)
+# ---------------------------------------------------------------------------
+
+
+def test_persistence_failure_returns_structured_500_with_cors_header(tmp_path: Path) -> None:
+    """A products dir that is NOT a git repo must yield a structured 500 WITH a
+    CORS header — not an unhandled raise.
+
+    This is the regression the deployed save 500 came from (MLI-197 / MLI-365):
+    `_resolve_repo_root` sat outside any try/except, so on the non-git container
+    it raised an unhandled RuntimeError -> FastAPI's bare 500, generated above
+    CORSMiddleware, carries no Access-Control-Allow-Origin -> the browser reports
+    "Failed to fetch" instead of the real error. The fix wraps the persistence
+    section so the failure becomes an HTTPException, which flows back through
+    CORSMiddleware and gets the header.
+    """
+    # products dir with a valid rubric.yaml but deliberately NOT inside a git repo.
+    mli_dir = tmp_path / "products" / "mli"
+    mli_dir.mkdir(parents=True)
+    shutil.copy(_REFERENCE_RUBRIC_YAML, mli_dir / "rubric.yaml")
+    products_dir = tmp_path / "products"
+
+    # raise_server_exceptions=False so an UNHANDLED 500 would surface as a 500
+    # response (with no CORS header) rather than re-raising into the test — i.e.
+    # the test still distinguishes "handled with CORS" from "unhandled".
+    from mmfp.api import rubric_write  # deferred import
+    from mmfp.api.main import app
+
+    app.dependency_overrides[rubric_write.get_products_dir] = lambda: products_dir
+    client = TestClient(app, raise_server_exceptions=False)
+
+    body = _load_rubric_dict(products_dir)
+    resp = client.put(
+        "/api/products/mli/rubric",
+        json={"rubric": body, "expected_version": "v0.1", "note": "x"},
+        headers={"Origin": "http://localhost:3000"},
+    )
+
+    assert resp.status_code == 500, resp.text
+    # Structured JSON body, not an opaque/empty error.
+    assert isinstance(resp.json().get("detail"), str)
+    # The header the browser needs to surface the real error instead of
+    # "Failed to fetch".
+    assert resp.headers.get("access-control-allow-origin") == "http://localhost:3000"
+
+
+# ---------------------------------------------------------------------------
 # Concurrency serialisation (AC4, MLI-194)
 # ---------------------------------------------------------------------------
 

@@ -301,25 +301,48 @@ def put_rubric(
 
         # YAML write + git commit. If anything past this point fails, restore
         # the YAML from HEAD so disk and HEAD don't diverge.
-        repo_root = _resolve_repo_root(products_dir)
-        relative_path = rubric_path.resolve().relative_to(repo_root)
-
-        rubric_path.write_text(
-            yaml.safe_dump(new_rubric_raw, sort_keys=False, allow_unicode=True),
-            encoding="utf-8",
-        )
-
+        #
+        # MLI-365: the whole persistence section is wrapped so a failure becomes
+        # a structured HTTPException, not an unhandled raise. The original
+        # `_resolve_repo_root` call sat OUTSIDE any try/except, so on the
+        # deployed (non-git) container it raised an unhandled RuntimeError ->
+        # FastAPI's bare 500 -> which, because it's generated above CORSMiddleware
+        # by ServerErrorMiddleware, carries NO Access-Control-Allow-Origin header
+        # -> the browser reports the missing CORS header as "Failed to fetch"
+        # and never surfaces the real error. An HTTPException, by contrast, is a
+        # normal response that flows back down through CORSMiddleware and DOES
+        # get CORS headers, so the UI shows a real message. (Durable persistence
+        # that removes the .git dependency entirely lands separately in MLI-365.)
         try:
-            commit_sha = _commit_rubric(
-                repo_root=repo_root,
-                relative_path=relative_path,
-                author=x_steward_identity or PLACEHOLDER_STEWARD,
-                message=_commit_message(payload.note, str(current_version), new_version),
+            repo_root = _resolve_repo_root(products_dir)
+            relative_path = rubric_path.resolve().relative_to(repo_root)
+
+            rubric_path.write_text(
+                yaml.safe_dump(new_rubric_raw, sort_keys=False, allow_unicode=True),
+                encoding="utf-8",
             )
-        except RuntimeError:
-            # Roll back the YAML so the on-disk state matches HEAD.
-            _git("checkout", "--", str(relative_path), cwd=repo_root)
-            raise HTTPException(status_code=500, detail="failed to commit rubric change")
+
+            try:
+                commit_sha = _commit_rubric(
+                    repo_root=repo_root,
+                    relative_path=relative_path,
+                    author=x_steward_identity or PLACEHOLDER_STEWARD,
+                    message=_commit_message(payload.note, str(current_version), new_version),
+                )
+            except RuntimeError:
+                # Roll back the YAML so the on-disk state matches HEAD.
+                _git("checkout", "--", str(relative_path), cwd=repo_root)
+                raise HTTPException(status_code=500, detail="failed to commit rubric change")
+        except HTTPException:
+            raise
+        except Exception as exc:  # noqa: BLE001 — any persistence failure must surface with CORS
+            logger.error(
+                "rubric.write.persist_failed",
+                extra={"product": product, "error_type": type(exc).__name__, "error": str(exc)},
+            )
+            raise HTTPException(
+                status_code=500, detail="failed to persist rubric change"
+            ) from exc
 
     logger.info(
         "rubric.write",
