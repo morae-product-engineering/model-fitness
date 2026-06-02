@@ -3,7 +3,7 @@
 // yet exist. Will go green once subtasks 2.4–2.10 land.
 import { test, expect } from '@playwright/test';
 
-test('scoreboard shows real scored candidates per tier', async ({ page }) => {
+test('scoreboard shows real scored candidates per tier', { tag: '@slice-acceptance' }, async ({ page }) => {
   await page.goto(process.env.MMFP_URL + '/scoreboard?product=mli');
 
   await expect(page.getByTestId('tier-card-tier_1')).toBeVisible();

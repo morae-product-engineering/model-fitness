@@ -32,7 +32,7 @@
 // which is why the active dims are substituted here.
 import { test, expect } from '@playwright/test';
 
-test('editor: change weight, preview impact, save commits to git', async ({ page }) => {
+test('editor: change weight, preview impact, save commits to git', { tag: '@slice-acceptance' }, async ({ page }) => {
   await page.goto(process.env.MMFP_URL + '/editor?product=mli');
 
   const versionBefore = await page.getByTestId('rubric-version').textContent();

@@ -368,10 +368,14 @@ jobs:
     name: End-to-End Tests (Playwright)
     needs: deploy-dev
     runs-on: ubuntu-latest
-    # Don't fail the workflow on a deliberate-red e2e (the slice spec proves
-    # itself by going red first, then green once deploy wiring is correct).
-    # The job's own status still reflects pass/fail; this just keeps later
-    # housekeeping steps (artifact upload, TestRail link summary) running.
+    # Hard gate for the regular e2e suite: runs every spec EXCEPT the
+    # @slice-acceptance-tagged ones. Those are deliberately red until their
+    # slice's implementation lands and run in the soft-failed
+    # `e2e-slice-acceptance` job below. A genuine regression in the regular
+    # suite must still red the workflow, so this stays continue-on-error:
+    # false. (MLI-363: this comment previously claimed the job tolerated
+    # deliberate-red specs while the value said the opposite; that toleration
+    # now lives in the dedicated soft-fail lane, so comment and value agree.)
     continue-on-error: false
     # MLI-178: OIDC opt-in for the static-website upload step. The job already
     # consumes secrets, but `azure/login@v2` needs id-token: write to mint
@@ -416,7 +420,9 @@ jobs:
         # Run from repo root so the testrail-reporter writes
         # testrail-run-url.txt (it uses process.cwd()) at a path the next
         # step can find. The reporter exits 0 even if TestRail is degraded.
-        run: npx playwright test
+        # Excludes @slice-acceptance-tagged specs; those run in the soft-fail
+        # `e2e-slice-acceptance` job below (MLI-363).
+        run: npx playwright test --grep-invert "@slice-acceptance"
 
       # Run regardless of test outcome so the TestRail link surfaces on red
       # runs too. The reporter writes the file in the working directory; we
@@ -490,3 +496,71 @@ jobs:
           else
             echo "_Static-website base URL not set (MMFP_REPORT_STATIC_WEBSITE_URL); report uploaded to $web/${DEST_PREFIX}/ on ${STORAGE_ACCOUNT}._" >> "$GITHUB_STEP_SUMMARY"
           fi
+
+  e2e-slice-acceptance:
+    # E2E analogue of the `slice-acceptance-tests` (pytest) job. Runs ONLY the
+    # specs tagged `@slice-acceptance` — the per-slice acceptance gates, which
+    # ship deliberately red and go green when their slice's implementation
+    # lands (e.g. slice-04-editor.spec.ts is red until the /editor route ships,
+    # MLI-191/MLI-363). Belt-and-braces soft-failure: both `continue-on-error:
+    # true` and `|| true` on the invocation. Either alone suffices; both stop a
+    # future engineer reintroducing the CI blocker by removing one. Failures
+    # stay visible via the uploaded HTML report and the TestRail run link —
+    # soft-failed, not suppressed. See CLAUDE.md "Tests" section.
+    name: Slice Acceptance Tests (Playwright)
+    needs: deploy-dev
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    env:
+      MMFP_URL: ${{ needs.deploy-dev.outputs.mmfp_url }}
+      MMFP_BASIC_AUTH_USER: ${{ secrets.MMFP_BASIC_AUTH_USER }}
+      MMFP_BASIC_AUTH_PASS: ${{ secrets.MMFP_BASIC_AUTH_PASS }}
+      TESTRAIL_URL: ${{ secrets.TESTRAIL_URL }}
+      TESTRAIL_USER: ${{ secrets.TESTRAIL_USER }}
+      TESTRAIL_API_KEY: ${{ secrets.TESTRAIL_API_KEY }}
+      TESTRAIL_PROJECT_ID: ${{ vars.TESTRAIL_PROJECT_ID }}
+      TESTRAIL_SUITE_SLICE_01: ${{ vars.TESTRAIL_SUITE_SLICE_01 }}
+      TESTRAIL_SUITE_SLICE_02: ${{ vars.TESTRAIL_SUITE_SLICE_02 }}
+      TESTRAIL_SUITE_SLICE_03: ${{ vars.TESTRAIL_SUITE_SLICE_03 }}
+      TESTRAIL_SUITE_SLICE_03P5: ${{ vars.TESTRAIL_SUITE_SLICE_03P5 }}
+      TESTRAIL_SUITE_SLICE_04: ${{ vars.TESTRAIL_SUITE_SLICE_04 }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Install Playwright Browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Slice-Acceptance E2E Tests
+        # Only the @slice-acceptance-tagged specs. `|| true` is belt-and-braces
+        # with the job-level continue-on-error so a red slice gate never blocks.
+        run: npx playwright test --grep "@slice-acceptance" || true
+
+      - name: Append TestRail URL to Summary
+        if: always()
+        run: |
+          set -euo pipefail
+          FILE=$(find . -maxdepth 3 -name testrail-run-url.txt -print -quit)
+          if [[ -n "${FILE:-}" && -s "${FILE}" ]]; then
+            URL=$(cat "${FILE}")
+            echo "TestRail run (slice-acceptance): ${URL}" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "_TestRail run URL not produced (reporter degraded or env vars missing)._" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload Playwright Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-slice-acceptance
+          path: playwright-report/
+          if-no-files-found: warn
+          retention-days: 14

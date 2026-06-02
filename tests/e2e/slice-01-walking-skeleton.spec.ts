@@ -6,7 +6,7 @@
 // breadcrumb back to MLI-153 stays visible during the slice 2 review.
 import { test, expect } from '@playwright/test';
 
-test.skip('walking skeleton: scorecard page displays hardcoded score', async ({ page }) => {
+test.skip('walking skeleton: scorecard page displays hardcoded score', { tag: '@slice-acceptance' }, async ({ page }) => {
   await page.goto(process.env.MMFP_URL + '/scoreboard');
   await expect(page.getByTestId('skeleton-score')).toContainText('42');
   await expect(page.getByTestId('skeleton-source')).toContainText('hardcoded MatrixRun');
