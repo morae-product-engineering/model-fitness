@@ -1,8 +1,9 @@
-"""Tests for GET /api/products/{product}/rubric (MLI-195).
+"""Tests for GET /api/products/{product}/rubric (MLI-195, MLI-365).
 
 Mirrors the harness used in test_rubric_write.py: dependency override for
-``get_rubric_loader``, real rubric loaded from the repository's products/mli
-directory, FastAPI TestClient.
+``get_rubric_store`` (MLI-365 — reads go through the durable store, not directly
+off disk), real rubric loaded from the repository's products/mli directory,
+FastAPI TestClient.
 
 Import of ``rubric_read`` is deferred into test bodies and helpers per
 CLAUDE.md — a module-level import that fails at collection time (before -m
@@ -27,22 +28,14 @@ _REFERENCE_RUBRIC_YAML = _REPO_ROOT / "products" / "mli" / "rubric.yaml"
 
 
 def _make_client(products_dir: Path) -> TestClient:
-    """Mount the rubric_read router with the products dir override applied."""
+    """Mount the rubric_read router with a DiskRubricStore bound to products_dir."""
     from mmfp.api import rubric_read  # deferred import
     from mmfp.api.main import app
-    from mmfp.models.rubric import Rubric
-    from mmfp.products.loader import load_rubric
+    from mmfp.api.rubric_store import DiskRubricStore
 
-    def _override_loader():
-        def _load(product: str) -> Rubric:
-            rubric_path = products_dir / product / "rubric.yaml"
-            if not rubric_path.exists():
-                raise FileNotFoundError(f"rubric.yaml not found at {rubric_path}")
-            return load_rubric(rubric_path)
-
-        return _load
-
-    app.dependency_overrides[rubric_read.get_rubric_loader] = _override_loader
+    app.dependency_overrides[rubric_read.get_rubric_store] = lambda: DiskRubricStore(
+        products_dir
+    )
     return TestClient(app, raise_server_exceptions=True)
 
 

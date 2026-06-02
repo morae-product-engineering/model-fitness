@@ -34,22 +34,20 @@ Convention notes:
 from __future__ import annotations
 
 import logging
-import os
 from collections.abc import Callable
 from decimal import Decimal
-from pathlib import Path
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, ValidationError
 
+from mmfp.api.rubric_store import RubricNotFound, get_rubric_store
 from mmfp.api.scoreboard import get_repository
 from mmfp.engine.scoring import ScoringEngine
 from mmfp.models.candidate import TierId
 from mmfp.models.matrix_run import MatrixRun, Scorecard
 from mmfp.models.rubric import Rubric
 from mmfp.persistence import MatrixRunRepository
-from mmfp.products.loader import load_rubric
 
 logger = logging.getLogger(__name__)
 
@@ -106,25 +104,28 @@ class PreviewImpactResponse(BaseModel):
 
 
 def get_current_rubric_loader() -> Callable[[str], Rubric]:
-    """Provide a callable that loads a product's current (live, on-disk) rubric.
+    """Provide a callable that loads a product's current (live) rubric.
 
-    Same `MMFP_PRODUCTS_DIR` convention as the rubric loader in
-    `candidate_detail.py` and the write endpoint in `rubric_write.py` — single
-    source of truth for env-var resolution. `FileNotFoundError` from the loader
-    signals an unknown product (mapped to 404 by the route).
+    MLI-365: "current" now means the durable store (the same one the write
+    endpoint persists to), not the image's on-disk bootstrap. The preview's
+    before/after comparison must track the persisted rubric so a save followed
+    by a re-preview reflects the new weighting — otherwise the impact preview
+    would silently compare against a stale baseline. `FileNotFoundError` signals
+    an unknown product (mapped to 404 by the route).
 
     Defined here rather than imported from `candidate_detail` so the two
     endpoints remain independently overridable in tests — the same pattern
     `trends.py` uses when it reuses scoreboard's providers while
     `candidate_detail` defines its own rubric loader.
     """
-    products_dir = Path(os.environ.get("MMFP_PRODUCTS_DIR", "products"))
+    store = get_rubric_store()
 
     def _load(product: str) -> Rubric:
-        rubric_path = products_dir / product / "rubric.yaml"
-        if not rubric_path.exists():
-            raise FileNotFoundError(f"rubric.yaml not found at {rubric_path}")
-        return load_rubric(rubric_path)
+        try:
+            raw, _version = store.load(product)
+        except RubricNotFound as exc:
+            raise FileNotFoundError(f"no rubric for product {product!r}") from exc
+        return Rubric.model_validate(raw)
 
     return _load
 
