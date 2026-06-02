@@ -14,7 +14,7 @@
 // the rubric grows.
 import { test, expect } from '@playwright/test';
 
-test('scoreboard shows ranked candidates with trend data', async ({ page }) => {
+test('scoreboard shows ranked candidates with trend data', { tag: '@slice-acceptance' }, async ({ page }) => {
   await page.goto(process.env.MMFP_URL + '/scoreboard?product=mli');
 
   const t3Candidates = page.getByTestId('tier-tier_3-candidate');

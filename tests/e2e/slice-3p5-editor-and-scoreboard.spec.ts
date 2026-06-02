@@ -22,7 +22,7 @@
 //     candidate, rendered inside the detail panel.
 import { test, expect } from '@playwright/test';
 
-test('weight save round-trips and candidate detail renders rubric weights', async ({ page }) => {
+test('weight save round-trips and candidate detail renders rubric weights', { tag: '@slice-acceptance' }, async ({ page }) => {
   await page.goto(process.env.MMFP_URL + '/scoreboard?product=mli');
   await page.getByTestId('tier-tier_1-candidate').first().click();
   await expect(page.getByTestId('dim-weight-classification_accuracy')).toContainText('35%');
