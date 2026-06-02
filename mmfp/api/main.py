@@ -19,7 +19,15 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-from mmfp.api import candidate_detail, rubric_preview, rubric_read, rubric_write, scoreboard, trends
+from mmfp.api import (
+    candidate_detail,
+    promotion,
+    rubric_preview,
+    rubric_read,
+    rubric_write,
+    scoreboard,
+    trends,
+)
 from mmfp.api.seed import download_seed_if_configured
 
 CORS_ORIGINS_ENV = "MMFP_CORS_ALLOWED_ORIGINS"
@@ -117,3 +125,4 @@ app.include_router(candidate_detail.router)
 app.include_router(rubric_write.router)
 app.include_router(rubric_preview.router)
 app.include_router(rubric_read.router)
+app.include_router(promotion.router)
