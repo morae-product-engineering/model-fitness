@@ -13,6 +13,9 @@ export default defineConfig({
       // imported. Stub is in tests/stubs/next-server.ts.
       'next/server': path.resolve(__dirname, 'tests/stubs/next-server.ts'),
       'next/navigation': path.resolve(__dirname, 'tests/stubs/next-navigation.ts'),
+      // MLI-196: next/link resolves to ui/node_modules/next which carries its
+      // own React instance, causing hook mismatch errors in component tests.
+      'next/link': path.resolve(__dirname, 'tests/stubs/next-link.tsx'),
     },
   },
   test: {
