@@ -320,7 +320,7 @@ describe("RubricEditor", () => {
         body: {
           previous_version: "v0.1",
           new_version: "v0.2",
-          commit_sha: "abc123",
+          audit_ref: "mli/rubric/audit/20260602T134501Z-v0.2.json",
         },
       },
     ]);

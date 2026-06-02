@@ -51,11 +51,14 @@ interface RubricEditorProps {
   version: string;
 }
 
-// Steward identity — populated by the deployment from env; falls back to a
-// recognisable local-dev value so saves always carry an identity.
+// Steward identity sent on the X-Steward-Identity header. Populated by the
+// deployment from env when SSO lands; until then it falls back to the SINGLE
+// reconciled placeholder (MLI-365) — the same string the API uses server-side
+// (rubric_write.PLACEHOLDER_STEWARD), so there is one placeholder identity
+// across the stack rather than two divergent ones.
 const STEWARD_IDENTITY =
   process.env.NEXT_PUBLIC_STEWARD_IDENTITY ??
-  "MMFP Editor <editor@morae.local>";
+  "Unknown Steward <steward@unknown.local>";
 
 // ---------------------------------------------------------------------------
 // Helpers

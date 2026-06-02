@@ -1,4 +1,4 @@
-"""Rubric read endpoint — GET /api/products/{product}/rubric (MLI-195).
+"""Rubric read endpoint — GET /api/products/{product}/rubric (MLI-195, MLI-365).
 
 Read-only counterpart to the PUT endpoint in ``rubric_write.py`` (MLI-273,
 reconciled in MLI-194). Added in MLI-195 because the UI container cannot
@@ -13,23 +13,21 @@ Architectural context (MLI-190 normalisation-boundary note):
   uses ``extra="forbid"``, which means the serialised form is exactly the
   schema the write endpoint expects.
 
-The dependency ``get_rubric_loader`` is defined here locally (not imported
-from another endpoint) so tests can override it independently — the same
-pattern used in ``rubric_preview.py``.
+MLI-365: reads go through ``rubric_store`` (the same durable store the write
+endpoint persists to), not directly off disk. This is what makes a saved
+rubric visible after a revision restart — the GET reflects the durable blob,
+so the Editor's version readout increments and persists.
 """
 
 from __future__ import annotations
 
-import os
-from collections.abc import Callable
-from pathlib import Path
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from mmfp.api.rubric_store import RubricNotFound, RubricStore, get_rubric_store
 from mmfp.models.rubric import Rubric
-from mmfp.products.loader import load_rubric
 
 router = APIRouter(tags=["rubric"])
 
@@ -46,30 +44,6 @@ class RubricReadResponse(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Dependency
-# ---------------------------------------------------------------------------
-
-
-def get_rubric_loader() -> Callable[[str], Rubric]:
-    """Provide a callable that loads a product's current rubric from disk.
-
-    Reads ``${MMFP_PRODUCTS_DIR:-products}/<product>/rubric.yaml`` via
-    ``load_rubric``.  Raises ``FileNotFoundError`` for unknown products
-    (mapped to 404 by the route). Defined locally so tests can override
-    this dependency independently of the preview and write endpoints.
-    """
-    products_dir = Path(os.environ.get("MMFP_PRODUCTS_DIR", "products"))
-
-    def _load(product: str) -> Rubric:
-        rubric_path = products_dir / product / "rubric.yaml"
-        if not rubric_path.exists():
-            raise FileNotFoundError(f"rubric.yaml not found at {rubric_path}")
-        return load_rubric(rubric_path)
-
-    return _load
-
-
-# ---------------------------------------------------------------------------
 # Route
 # ---------------------------------------------------------------------------
 
@@ -81,7 +55,7 @@ def get_rubric_loader() -> Callable[[str], Rubric]:
 )
 def get_rubric(
     product: str,
-    rubric_loader: Annotated[Callable[[str], Rubric], Depends(get_rubric_loader)],
+    store: Annotated[RubricStore, Depends(get_rubric_store)],
 ) -> RubricReadResponse:
     """Return the full rubric dict for ``product``.
 
@@ -92,13 +66,16 @@ def get_rubric(
     passthrough fields).
 
     Error states:
-      * 404 — product's ``rubric.yaml`` doesn't exist (unknown product).
+      * 404 — the product has no rubric in the store (unknown product).
     """
     try:
-        rubric = rubric_loader(product)
-    except FileNotFoundError:
+        raw, _version = store.load(product)
+    except RubricNotFound:
         raise HTTPException(status_code=404, detail=f"Unknown product '{product}'")
 
+    # Validate-then-dump so the returned dict is exactly the schema the write
+    # and preview endpoints expect (round-trips through Rubric.model_validate).
+    rubric = Rubric.model_validate(raw)
     return RubricReadResponse(
         product=product,
         version=rubric.version,

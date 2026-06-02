@@ -133,7 +133,9 @@ export interface RubricSaveRequest {
 export interface RubricSaveResponse {
   previous_version: string;
   new_version: string;
-  commit_sha: string;
+  // MLI-365: the audit trail moved off git to a durable store; this is the
+  // storage name of the immutable audit record (was `commit_sha`).
+  audit_ref: string;
 }
 
 export interface RubricSaveConflict {

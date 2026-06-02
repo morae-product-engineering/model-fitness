@@ -17,6 +17,13 @@ dependencies = [
     # PyYAML is enough — ruamel.yaml's comment-preserving features aren't
     # earned yet.
     "pyyaml>=6.0",
+    # MLI-365: durable rubric writes persist to Azure Blob in the deployed env,
+    # authenticated with the container's managed identity. DefaultAzureCredential
+    # (named in the sub-task brief) comes from azure-identity; BlobClient from
+    # azure-storage-blob. Both lazy-imported in rubric_store so local/disk-mode
+    # never loads them.
+    "azure-identity>=1.16",
+    "azure-storage-blob>=12.20",
 ]
 
 [project.scripts]
