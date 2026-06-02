@@ -1,43 +1,56 @@
 # @jira: MLI-268 (test) / MLI-267 (parent slice: Slice 3.5 — Align v0.1
-#         Rubric with its reference and close Slice 3 visual gaps)
+#         Rubric with its reference and close Slice 3 visual gaps) /
+#         MLI-360 (reconciled the test's plumbing to the shipped rubric/
+#         engine API after MLI-269 shipped a different surface than this
+#         test sketched; discrimination assertion preserved verbatim).
 """Slice 3.5 acceptance test — rubric alignment and per-tier discrimination.
 
-This test is **deliberately red** against current main and will remain so
-until MLI-269 lands (rubric model + matrix engine changes + rubric YAML
-alignment).
+Asserts that at least one **active** dimension per tier produces distinct
+normalised scores across candidates — i.e. the rubric, as actually weighted,
+discriminates between models rather than scoring them uniformly.
 
-Expected failure mode on main:
-  AttributeError — either `Rubric.load` (class method does not yet exist
-  on the Rubric model) or `Tier.active_dimensions` (instance method ships
-  in the 3.5.2 sub-task, not yet present). The exact symbol Python resolves
-  first depends on runtime state; either AttributeError is acceptable. The
-  test must NOT fail with an ordinary assertion error on degenerate data —
-  if you see an AssertionError, transcription has gone wrong.
+Construction mirrors the Slice 2 acceptance test ``test_matrix_run.py``: real
+``products/mli/`` configuration loaded via the conftest fixtures and driven
+through the real ``MatrixEngine().run(...)`` signature. Like that test it is
+gated green in CI by ``baseline-matrix.yml`` (which authenticates to Foundry);
+the ``slice_acceptance`` marker keeps it out of the standard unit-test job.
 
-Goes green when:
-  - MLI-269 (rubric model adds Rubric.load + Tier.active_dimensions, matrix
-    engine exposes the new run() signature, rubric YAML realigned to the
-    v0.1 reference document) lands and is merged to main.
-
-Do not soften the assertion, add a skip, or add a TODO to make it pass.
-The whole point of this sub-task (MLI-268) is to record the acceptance
-criterion in executable form before the implementation exists.
+Why is this red?
+  - Missing Foundry creds locally → the binding errors per cell, the run still
+    completes, and the assertion reflects whatever scored.
+  - An ``AssertionError`` is a real finding: a tier whose active dimensions all
+    score uniformly. Per the 2026-06-02 baseline run every tier has at least
+    one discriminating active dimension, so the assertion is expected to PASS.
+    Do not soften, skip, or ``TODO`` the assertion, and do not edit the rubric
+    to induce discrimination — surface a red as a finding (MLI-360 / MLI-190
+    (a)-discipline).
 """
 
 import pytest
 
-from mmfp.engine.matrix import MatrixEngine
-from mmfp.models.rubric import Rubric
-
 pytestmark = pytest.mark.slice_acceptance
 
 
-def test_matrix_run_discriminates_per_tier():
+def test_matrix_run_discriminates_per_tier(
+    real_rubric, real_dataset, real_candidates, real_dimension_evaluators
+):
     """At least one active dimension per tier produces distinct scores across candidates."""
-    run = MatrixEngine(Rubric.load('products/mli/rubric.yaml')).run()
-    for tier in run.rubric.tiers:
+    from mmfp.engine.matrix import MatrixEngine
+
+    run = MatrixEngine().run(
+        rubric=real_rubric,
+        datasets=real_dataset,
+        candidates=real_candidates,
+        dimension_evaluators=real_dimension_evaluators,
+    )
+    for tier in real_rubric.tiers:
+        cards = run.scores_for_tier(tier.id, tier)
         per_dim = {
-            d.id: {run.score(c, tier, d).normalized_score for c in run.candidates_in(tier)}
+            d.id: {
+                card.per_dimension[d.id]
+                for card in cards
+                if d.id in card.per_dimension
+            }
             for d in tier.active_dimensions()
         }
         assert any(len(s) > 1 for s in per_dim.values()), \
