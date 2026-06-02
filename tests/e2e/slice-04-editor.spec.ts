@@ -15,18 +15,24 @@
 //   - The save path itself (PUT /api/products/{product}/rubric) already
 //     shipped in Slice 3.5 (MLI-273); the Editor consumes it as its save call.
 //
-// Status (MLI-197, verified against deployed dev): the editor + preview path is
-// GREEN through line 50 — the page loads, weight inputs accept edits, the tier_2
-// impact preview renders, the rank flip shows (ranking-change-row), and the save
-// is submitted. The FINAL toast assertion is RED for a real, pre-impl-masked
-// PRODUCT/DEPLOYMENT gap, NOT a test fault: PUT /api/products/{product}/rubric
-// 500s in the deployed API container because the container is not a git repo
-// (mmfp/api/Dockerfile COPYs products/ but not .git), so the git-commit audit
-// step (_resolve_repo_root -> `git rev-parse`) raises; the CORS-less 500 reaches
-// the browser as "Failed to fetch". Caught only now because MLI-195's e2e ran
-// locally (where .git exists). Do NOT soften the toast assertion to go green —
-// the save genuinely fails on dev. Tracked as a Slice 4 close blocker; see the
-// MLI-197 closing comment.
+// Status (MLI-365): durable blob persistence replaced the git-commit save path.
+// PUT /api/products/{product}/rubric now succeeds on deployed dev — the API
+// container is no longer required to be a git repo — and the saved rubric
+// survives a revision restart (the rubric persists to Azure Blob via the
+// container's managed identity). The save toast + version-increment go green
+// against deployed dev. Do NOT soften the toast assertion. (Before MLI-365 this
+// was RED because _resolve_repo_root -> `git rev-parse` raised on the non-git
+// container and the CORS-less 500 reached the browser as "Failed to fetch"; see
+// the MLI-197 closing comment for the original diagnosis.)
+//
+// Re-run safety (MLI-365): because saves are now DURABLE, the edit is a TOGGLE
+// relative to the current persisted weighting rather than fixed values — filling
+// the already-saved values would be a no-op, leaving the save button disabled.
+// Each run flips tier_2 query_correctness/latency_p95 between 5/35 and 30/10;
+// both are valid (active sum 80) and both flip a `kimi-k2-6` rank, so every run
+// is a genuine edit -> rank change -> version bump. This test therefore asserts
+// that a genuine edit ROUND-TRIPS, FLIPS A RANK, and PERSISTS — it does NOT pin
+// a specific end-state weighting (do not read 5/35 as the canonical rubric).
 //
 // Dimension choice (re-pinned in MLI-197 — supersedes the tier_3 choice the
 // MLI-190 architectural-reality comment of 2026-05-16 recommended). That comment
@@ -44,13 +50,20 @@
 // comment for the full dominance-chain analysis.
 import { test, expect } from '@playwright/test';
 
-test('editor: change weight, preview impact, save commits to git', { tag: '@slice-acceptance' }, async ({ page }) => {
+test('editor: change weight, preview impact, save persists durably', { tag: '@slice-acceptance' }, async ({ page }) => {
   await page.goto(process.env.MMFP_URL + '/editor?product=mli');
 
   const versionBefore = await page.getByTestId('rubric-version').textContent();
 
-  await page.getByTestId('weight-input-tier_2.query_correctness').fill('5');
-  await page.getByTestId('weight-input-tier_2.latency_p95').fill('35');
+  // Toggle relative to the CURRENT persisted weighting so every run is a genuine
+  // edit (MLI-365 — saves are durable now; re-filling the saved values would be a
+  // no-op). Both states (5/35 and 30/10) are valid and flip a kimi-k2-6 rank.
+  const qcNow = Number(
+    await page.getByTestId('weight-input-tier_2.query_correctness').inputValue(),
+  );
+  const toLowQc = qcNow !== 5;
+  await page.getByTestId('weight-input-tier_2.query_correctness').fill(toLowQc ? '5' : '30');
+  await page.getByTestId('weight-input-tier_2.latency_p95').fill(toLowQc ? '35' : '10');
 
   await expect(page.getByTestId('impact-preview-tier_2')).toBeVisible();
   await expect(page.getByTestId('ranking-change-row').first()).toBeVisible();
