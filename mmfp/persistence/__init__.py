@@ -15,11 +15,21 @@ from mmfp.persistence.audit_log import (
     AuditLogRepository,
     get_audit_log_repository,
 )
+from mmfp.persistence.candidate_status import (
+    CandidateStatusConfigError,
+    CandidateStatusStore,
+    CandidateStatusVersionConflict,
+    get_candidate_status_store,
+)
 from mmfp.persistence.matrix_run_repository import MatrixRunRepository
 
 __all__ = [
     "AuditLogConfigError",
     "AuditLogRepository",
+    "CandidateStatusConfigError",
+    "CandidateStatusStore",
+    "CandidateStatusVersionConflict",
     "MatrixRunRepository",
     "get_audit_log_repository",
+    "get_candidate_status_store",
 ]
