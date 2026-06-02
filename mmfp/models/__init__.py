@@ -5,6 +5,12 @@ boundaries (UI, persistence, exports). Schema-versioned so older artefacts
 remain re-scoreable under newer rubrics.
 """
 
+from mmfp.models.audit import (
+    AuditAction,
+    AuditLogEntry,
+    ChainVerification,
+    StatusChange,
+)
 from mmfp.models.binding_response import BindingResponse, TokenUsage
 from mmfp.models.candidate import (
     Candidate,
@@ -34,8 +40,11 @@ from mmfp.models.rubric import (
 )
 
 __all__ = [
+    "AuditAction",
+    "AuditLogEntry",
     "BindingResponse",
     "Candidate",
+    "ChainVerification",
     "CandidateBinding",
     "CandidateFamily",
     "CandidateStatus",
@@ -54,6 +63,7 @@ __all__ = [
     "Rubric",
     "Scorecard",
     "SourceField",
+    "StatusChange",
     "Tier",
     "TokenUsage",
     "Weight",
