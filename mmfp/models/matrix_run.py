@@ -120,6 +120,32 @@ class Scorecard(BaseModel):
     )
     status: CandidateStatus = CandidateStatus.UNDER_EVALUATION
     tied_with: list[str] = Field(default_factory=list)
+    rubric_version: str | None = Field(
+        default=None,
+        description=(
+            "Rubric.version this card was scored under. Set by "
+            "`mmfp.engine.scoring.ScoringEngine` when re-scoring a run under a "
+            "(possibly newer) rubric; None for cards built by `scores_for_tier`, "
+            "which does not carry a rubric version (the Tier it takes has none)."
+        ),
+    )
+    source_run_id: str | None = Field(
+        default=None,
+        description=(
+            "Id of the MatrixRun whose raw outputs produced this card, when "
+            "re-scored by ScoringEngine; None for cards built directly by "
+            "`scores_for_tier`."
+        ),
+    )
+    has_complete_coverage: bool = Field(
+        default=True,
+        description=(
+            "False when the scoring rubric declares an active dimension the run "
+            "never measured (a coverage gap). Such gaps lower `weighted_score` "
+            "rather than raising — see ScoringEngine (MLI-192). Defaults True: "
+            "`scores_for_tier` performs no coverage analysis."
+        ),
+    )
 
 
 class MatrixRun(BaseModel):

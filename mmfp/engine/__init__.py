@@ -7,5 +7,6 @@ shapes it produces (`MatrixRun`, `MatrixRunResult`, `EvaluatorScore`) live in
 """
 
 from mmfp.engine.matrix import MatrixEngine
+from mmfp.engine.scoring import ScoringEngine
 
-__all__ = ["MatrixEngine"]
+__all__ = ["MatrixEngine", "ScoringEngine"]
