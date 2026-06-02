@@ -12,6 +12,7 @@ export default defineConfig({
       // job can't resolve `next/server` when ui/middleware.ts is transitively
       // imported. Stub is in tests/stubs/next-server.ts.
       'next/server': path.resolve(__dirname, 'tests/stubs/next-server.ts'),
+      'next/navigation': path.resolve(__dirname, 'tests/stubs/next-navigation.ts'),
     },
   },
   test: {

@@ -53,3 +53,34 @@ export const IconExternal = stroke(
     <line x1="10" y1="14" x2="21" y2="3" />
   </>,
 );
+
+// lifted from ui/prototype/primitives.jsx:203 (IconCheck)
+export const IconCheck = stroke(<polyline points="20 6 9 17 4 12" />);
+
+// lifted from ui/prototype/primitives.jsx:207 (IconAlert)
+export const IconAlert = stroke(
+  <>
+    <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+    <line x1="12" y1="9" x2="12" y2="13" />
+    <line x1="12" y1="17" x2="12" y2="17" />
+  </>,
+);
+
+// lifted from ui/prototype/primitives.jsx:208 (IconInfo)
+export const IconInfo = stroke(
+  <>
+    <circle cx="12" cy="12" r="10" />
+    <line x1="12" y1="16" x2="12" y2="12" />
+    <line x1="12" y1="8" x2="12" y2="8" />
+  </>,
+);
+
+// lifted from ui/prototype/primitives.jsx:217 (IconRefresh)
+export const IconRefresh = stroke(
+  <>
+    <polyline points="23 4 23 10 17 10" />
+    <polyline points="1 20 1 14 7 14" />
+    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10" />
+    <path d="M20.49 15a9 9 0 0 1-14.85 3.36L1 14" />
+  </>,
+);

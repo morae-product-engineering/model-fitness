@@ -15,7 +15,7 @@ interface TabSpec {
 
 const TABS: TabSpec[] = [
   { id: "scoreboard", label: "Scoreboard", href: "/scoreboard?product=mli" },
-  { id: "editor", label: "Editor" },
+  { id: "editor", label: "Editor", href: "/editor?product=mli" },
   { id: "curator", label: "Curator" },
   { id: "history", label: "History" },
 ];
