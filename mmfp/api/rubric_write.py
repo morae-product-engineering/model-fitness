@@ -25,6 +25,28 @@ Out of scope (documented in the MLI-273 closing comment):
   * Pushing to the remote — commit is local; a separate mechanism (CI
     sync or a follow-up sub-task) is responsible for propagation.
   * CLI parity — `mmfp rubric set` is a follow-up.
+
+MLI-194 reconciliation
+-----------------------
+MLI-194's acceptance overlaps this endpoint, shipped earlier under MLI-273.
+MLI-194 reconciled what was here rather than rebuilding it: added the
+in-process concurrency lock (below) and confirmed the version-bump rule.
+Three points of record for a future reader:
+
+  * Versioning (AC2): the PATCH/MINOR/MAJOR classification AC2 describes is
+    intentionally DEFERRED. The `Rubric.version` format is 2-component
+    `vMAJOR.MINOR` and cannot carry a PATCH component, and `tier.id` is a
+    fixed `Literal["tier_1","tier_2","tier_3"]` so a tier-structure (MAJOR)
+    change is unreachable today. Minor-bump-on-any-content-change (see
+    `_bump_minor`) is the reconciled behaviour. Revisit when tiers stop
+    being a fixed Literal.
+  * Durability: the commit is LOCAL to the container's non-durable
+    filesystem; `git push` to a remote is deferred (the MLI-190
+    durable-evidence thread). A "successful save" persists only until the
+    container revision restarts — this is not yet durable persistence.
+  * Concurrency (AC4): an in-process per-product `threading.Lock` serialises
+    the read->validate->write->commit critical section. It serialises within
+    a single replica only — correct for the single-replica R1 deployment.
 """
 
 from __future__ import annotations
@@ -33,6 +55,7 @@ import logging
 import os
 import re
 import subprocess
+import threading
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -68,6 +91,27 @@ PLACEHOLDER_STEWARD = "Unknown Steward <steward@unknown.local>"
 # user's credentials. Until then, callers (the dev UI, a steward's local
 # `curl`) set it themselves. See MLI-267 architectural-input.
 _STEWARD_HEADER = "X-Steward-Identity"
+
+# Per-product locks serialise the read->validate->write->commit critical
+# section so the `expected_version` handshake (the 409 path) actually holds
+# under concurrency (AC4, MLI-194). Correct for the single-replica R1
+# deployment: the rubric repo lives on the container's own non-durable
+# filesystem, so a single replica is the unit of consistency. This is NOT a
+# distributed lock — a multi-replica or shared-volume topology would need the
+# durable-store decision tracked on the MLI-190 durable-evidence thread.
+# ASSUMES the dev Container App is pinned minReplicas=maxReplicas=1; a future
+# scale-out without that pin silently reintroduces the race.
+_locks_guard = threading.Lock()
+_product_locks: dict[str, threading.Lock] = {}
+
+
+def _lock_for(product: str) -> threading.Lock:
+    with _locks_guard:
+        lock = _product_locks.get(product)
+        if lock is None:
+            lock = threading.Lock()
+            _product_locks[product] = lock
+        return lock
 
 
 # ---------------------------------------------------------------------------
@@ -208,68 +252,74 @@ def put_rubric(
     if not rubric_path.exists():
         raise HTTPException(status_code=404, detail=f"Unknown product '{product}'")
 
-    # Load current rubric to discover the live version. We deliberately read
-    # the YAML rather than trusting `payload.rubric["version"]` — the steward
-    # may have edited the version field, and `expected_version` is the
-    # authoritative "what I thought was live" handshake.
-    current_raw = yaml.safe_load(rubric_path.read_text(encoding="utf-8"))
-    current_version = current_raw.get("version")
+    # Hold the per-product lock across the whole read-version -> 409-check ->
+    # validate -> write -> commit section so the `expected_version` handshake
+    # is atomic w.r.t. concurrent writers within this replica (AC4, MLI-194).
+    # The `with` block releases the lock on every exit path: the 409 `return`,
+    # the 422 `raise`, the 500 `raise`, and the happy fall-through.
+    with _lock_for(product):
+        # Load current rubric to discover the live version. We deliberately read
+        # the YAML rather than trusting `payload.rubric["version"]` — the steward
+        # may have edited the version field, and `expected_version` is the
+        # authoritative "what I thought was live" handshake.
+        current_raw = yaml.safe_load(rubric_path.read_text(encoding="utf-8"))
+        current_version = current_raw.get("version")
 
-    if payload.expected_version != current_version:
-        # 409 with both versions so the client can show a useful diff dialog.
-        # Per the MLI-267 concurrency architectural-input this is last-write-
-        # *loses* — the second writer rebases their edit on top of the new
-        # current_version themselves. Returned as a top-level body (not under
-        # `detail`) because the UI editor needs `current_version` to refetch.
-        return JSONResponse(
-            status_code=409,
-            content={
-                "error": "version_conflict",
-                "current_version": current_version,
-                "expected_version": payload.expected_version,
-            },
+        if payload.expected_version != current_version:
+            # 409 with both versions so the client can show a useful diff dialog.
+            # Per the MLI-267 concurrency architectural-input this is last-write-
+            # *loses* — the second writer rebases their edit on top of the new
+            # current_version themselves. Returned as a top-level body (not under
+            # `detail`) because the UI editor needs `current_version` to refetch.
+            return JSONResponse(
+                status_code=409,
+                content={
+                    "error": "version_conflict",
+                    "current_version": current_version,
+                    "expected_version": payload.expected_version,
+                },
+            )
+
+        # Compute the new version *before* validation so the validator sees the
+        # rubric in the shape it will be persisted. The steward's submitted
+        # `version` is overwritten — the server owns version assignment.
+        new_version = _bump_minor(str(current_version))
+        new_rubric_raw = dict(payload.rubric)
+        new_rubric_raw["version"] = new_version
+
+        try:
+            Rubric.model_validate(new_rubric_raw)
+        except ValidationError as exc:
+            # Surface the structured errors directly. FastAPI's default 422
+            # body shape is `{"detail": [{loc, msg, type}, ...]}`; we mirror it
+            # so the UI has one error shape to render. `include_context=False`
+            # strips Pydantic's raw-exception payloads that aren't JSON-safe.
+            raise HTTPException(
+                status_code=422,
+                detail=exc.errors(include_url=False, include_context=False, include_input=False),
+            ) from exc
+
+        # YAML write + git commit. If anything past this point fails, restore
+        # the YAML from HEAD so disk and HEAD don't diverge.
+        repo_root = _resolve_repo_root(products_dir)
+        relative_path = rubric_path.resolve().relative_to(repo_root)
+
+        rubric_path.write_text(
+            yaml.safe_dump(new_rubric_raw, sort_keys=False, allow_unicode=True),
+            encoding="utf-8",
         )
 
-    # Compute the new version *before* validation so the validator sees the
-    # rubric in the shape it will be persisted. The steward's submitted
-    # `version` is overwritten — the server owns version assignment.
-    new_version = _bump_minor(str(current_version))
-    new_rubric_raw = dict(payload.rubric)
-    new_rubric_raw["version"] = new_version
-
-    try:
-        Rubric.model_validate(new_rubric_raw)
-    except ValidationError as exc:
-        # Surface the structured errors directly. FastAPI's default 422
-        # body shape is `{"detail": [{loc, msg, type}, ...]}`; we mirror it
-        # so the UI has one error shape to render. `include_context=False`
-        # strips Pydantic's raw-exception payloads that aren't JSON-safe.
-        raise HTTPException(
-            status_code=422,
-            detail=exc.errors(include_url=False, include_context=False, include_input=False),
-        ) from exc
-
-    # YAML write + git commit. If anything past this point fails, restore
-    # the YAML from HEAD so disk and HEAD don't diverge.
-    repo_root = _resolve_repo_root(products_dir)
-    relative_path = rubric_path.resolve().relative_to(repo_root)
-
-    rubric_path.write_text(
-        yaml.safe_dump(new_rubric_raw, sort_keys=False, allow_unicode=True),
-        encoding="utf-8",
-    )
-
-    try:
-        commit_sha = _commit_rubric(
-            repo_root=repo_root,
-            relative_path=relative_path,
-            author=x_steward_identity or PLACEHOLDER_STEWARD,
-            message=_commit_message(payload.note, str(current_version), new_version),
-        )
-    except RuntimeError:
-        # Roll back the YAML so the on-disk state matches HEAD.
-        _git("checkout", "--", str(relative_path), cwd=repo_root)
-        raise HTTPException(status_code=500, detail="failed to commit rubric change")
+        try:
+            commit_sha = _commit_rubric(
+                repo_root=repo_root,
+                relative_path=relative_path,
+                author=x_steward_identity or PLACEHOLDER_STEWARD,
+                message=_commit_message(payload.note, str(current_version), new_version),
+            )
+        except RuntimeError:
+            # Roll back the YAML so the on-disk state matches HEAD.
+            _git("checkout", "--", str(relative_path), cwd=repo_root)
+            raise HTTPException(status_code=500, detail="failed to commit rubric change")
 
     logger.info(
         "rubric.write",
