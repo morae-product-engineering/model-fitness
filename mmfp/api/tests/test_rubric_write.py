@@ -13,6 +13,7 @@ doesn't exist yet).
 
 from __future__ import annotations
 
+import concurrent.futures
 import shutil
 import subprocess
 from pathlib import Path
@@ -287,3 +288,66 @@ def test_path_traversal_in_product_slug_rejected(products_dir: Path) -> None:
     # 400s on slug validation. Either is fine — what matters is we never
     # write outside products_dir.
     assert resp.status_code in (400, 404)
+
+
+# ---------------------------------------------------------------------------
+# Concurrency serialisation (AC4, MLI-194)
+# ---------------------------------------------------------------------------
+
+
+def test_concurrent_writes_serialise_one_winner(products_dir: Path) -> None:
+    """N concurrent PUTs, all claiming the same expected_version, serialise to
+    exactly one winner.
+
+    Without the per-product lock (Change 1, MLI-194) this test FAILs: multiple
+    writers pass the `expected_version` 409 check before any of them commits,
+    so several land 200s and/or a `git index.lock` collision surfaces as a 500.
+    The lock makes the read->check->write->commit section atomic per replica,
+    so the second writer onward sees the winner's bumped version and gets 409.
+    """
+    n = 8
+    body = _load_rubric_dict(products_dir)
+
+    sha_before = _run_git("rev-parse", "HEAD", cwd=products_dir.parent).strip()
+
+    def _worker() -> tuple[int, dict[str, Any]]:
+        # Each worker uses its own TestClient against the same tmp repo. The
+        # dependency override is idempotent, so re-applying it per worker is
+        # safe and sidesteps any httpx-client cross-thread sharing question.
+        client = _make_client(products_dir)
+        resp = client.put(
+            "/api/products/mli/rubric",
+            json={"rubric": body, "expected_version": "v0.1", "note": "concurrent"},
+        )
+        return resp.status_code, resp.json()
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=n) as pool:
+        futures = [pool.submit(_worker) for _ in range(n)]
+        results = [f.result() for f in futures]
+
+    statuses = [status for status, _ in results]
+    winners = [data for status, data in results if status == 200]
+    conflicts = [data for status, data in results if status == 409]
+
+    # Exactly one winner, the rest are clean 409s — no 500s, no extra 200s.
+    assert statuses.count(200) == 1, results
+    assert statuses.count(409) == n - 1, results
+    assert len(winners) + len(conflicts) == n, results
+
+    # The winner bumped v0.1 -> v0.2; every loser saw the bumped current_version.
+    assert winners[0]["new_version"] == "v0.2"
+    assert all(c["current_version"] == "v0.2" for c in conflicts), conflicts
+
+    # Exactly one new commit landed — no double-commit, no partial state.
+    sha_after = _run_git("rev-parse", "HEAD", cwd=products_dir.parent).strip()
+    count_before = int(
+        _run_git("rev-list", "--count", sha_before, cwd=products_dir.parent).strip()
+    )
+    count_after = int(
+        _run_git("rev-list", "--count", sha_after, cwd=products_dir.parent).strip()
+    )
+    assert count_after - count_before == 1, (count_before, count_after)
+
+    # On-disk YAML loads cleanly and reflects the single bump (no corruption).
+    on_disk = _load_rubric_dict(products_dir)
+    assert on_disk["version"] == "v0.2"
