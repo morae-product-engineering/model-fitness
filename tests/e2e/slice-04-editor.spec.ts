@@ -15,9 +15,18 @@
 //   - The save path itself (PUT /api/products/{product}/rubric) already
 //     shipped in Slice 3.5 (MLI-273); the Editor consumes it as its save call.
 //
-// Status: GREEN. Slice 4 landed (MLI-195 Editor UI, MLI-192/MLI-193 re-score +
-// impact-preview); MLI-197 verified this spec against deployed dev. Do NOT
-// loosen the selectors, add a skip, or soften the rank-change assertion.
+// Status (MLI-197, verified against deployed dev): the editor + preview path is
+// GREEN through line 50 — the page loads, weight inputs accept edits, the tier_2
+// impact preview renders, the rank flip shows (ranking-change-row), and the save
+// is submitted. The FINAL toast assertion is RED for a real, pre-impl-masked
+// PRODUCT/DEPLOYMENT gap, NOT a test fault: PUT /api/products/{product}/rubric
+// 500s in the deployed API container because the container is not a git repo
+// (mmfp/api/Dockerfile COPYs products/ but not .git), so the git-commit audit
+// step (_resolve_repo_root -> `git rev-parse`) raises; the CORS-less 500 reaches
+// the browser as "Failed to fetch". Caught only now because MLI-195's e2e ran
+// locally (where .git exists). Do NOT soften the toast assertion to go green —
+// the save genuinely fails on dev. Tracked as a Slice 4 close blocker; see the
+// MLI-197 closing comment.
 //
 // Dimension choice (re-pinned in MLI-197 — supersedes the tier_3 choice the
 // MLI-190 architectural-reality comment of 2026-05-16 recommended). That comment
