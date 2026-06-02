@@ -48,6 +48,25 @@
 # `LANGSMITH_API_KEY` is unset; trace-upload failures inside the SDK happen
 # on a background thread and never surface to the engine. Both together
 # mean quota exhaustion can't fail the seed.
+#
+# Two-job design (MLI-359)
+# ------------------------
+# The original single-job wired the slice-2 acceptance pytest hard gate
+# BEFORE the blob-upload and verify steps. A failing test skipped publish
+# entirely, stranding a £3-6 Foundry spend in a 7-day throwaway artifact
+# while the deployed API continued serving stale data. The verify net — which
+# exists to catch silent seed failures — sat behind the same gate, so it
+# could never fire on the failure mode it was written for.
+#
+# MLI-359 splits the work into two jobs:
+#   seed       — matrix run → publish → rotate → verify (no pytest).
+#                Always publishes when the matrix run succeeds. The verify
+#                step (ungated, set -e) reds this job on a silent seed
+#                failure.
+#   acceptance — runs pytest -m slice_acceptance after seed succeeds.
+#                Re-establishes auth/install on a fresh runner (inherent to
+#                the job split). A red acceptance job reds the workflow run,
+#                preserving the MLI-178 "slice not done" signal.
 
 name: Baseline Matrix (seed dev)
 
@@ -81,12 +100,13 @@ jobs:
     runs-on: ubuntu-latest
     # Cost guard: matrix takes ~30 min in practice (10 candidates × 25
     # examples, max_workers=4) — the original 30-min estimate of
-    # "single-digit minutes" understated Foundry call latency. With the
-    # MLI-178 pytest hard-gate step also re-walking the matrix, total
-    # runtime ~60-70 min. 120 min leaves headroom for one-off slow
-    # deployments (e.g. cold-start Phi-class) while still tripping before
-    # any runaway retry loop. Surfaced as MLI-178 tuning.
-    timeout-minutes: 120
+    # "single-digit minutes" understated Foundry call latency. After the
+    # MLI-359 split the pytest step (which re-walked the full matrix) runs
+    # in the separate `acceptance` job, so this job covers matrix run +
+    # blob upload + rotate + verify only (~30 min work). 90 min leaves
+    # headroom for cold-start Phi-class deployments and any one-off latency
+    # spike without letting a runaway retry loop run indefinitely.
+    timeout-minutes: 90
     permissions:
       id-token: write
       contents: read
@@ -180,30 +200,12 @@ jobs:
           RUN_ID=$(grep -E '^run_id:' run-output.txt | head -1 | awk '{print $2}')
           echo "run_id=${RUN_ID}" >> "$GITHUB_OUTPUT"
 
-      - name: Run slice-acceptance pytest (hard gate)
-        # MLI-178: slice-2 acceptance test (`mmfp/tests/test_matrix_run.py`)
-        # gated here rather than ci.yml's `slice-acceptance-tests` job. The
-        # test calls real Foundry via the engine — gating on every PR would
-        # double Foundry spend, gating here piggybacks on the seed run's
-        # already-active creds. ci.yml's slice-acceptance-tests job keeps
-        # its soft-fail pattern for Slice 3+ acceptance tests.
-        #
-        # Note: the test re-walks the same candidate × dataset cells as the
-        # CLI step above, so per-run Foundry cost roughly doubles. Acceptable
-        # because (a) baseline-matrix.yml runs only on merge to main +
-        # workflow_dispatch, not per PR; (b) total stays under the 30-min /
-        # £5 budget for a small slate.
-        run: |
-          set -euo pipefail
-          pip install "pytest>=8"
-          pytest -m slice_acceptance mmfp/
-
       - name: Upload SQLite as workflow artifact (debug/recovery)
         # MLI-177 follow-up: belt-and-braces capture before the blob upload
         # so the matrix run's persisted output is recoverable from the GitHub
         # UI on any failure between matrix-run-completion and blob-upload —
-        # including a failed pytest gate or the expired-OIDC-token case
-        # below. Always runs so a £3-6 Foundry spend can't get stranded.
+        # including the expired-OIDC-token case below. Always runs so a
+        # £3-6 Foundry spend can't get stranded.
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -213,10 +215,10 @@ jobs:
           if-no-files-found: warn
 
       - name: Re-authenticate to Azure (OIDC token refresh)
-        # MLI-177 follow-up: matrix + pytest steps can exceed the 5-15 min
-        # OIDC federated-token window. The original azure/login at the top
-        # of the job leaves post-matrix az commands using an expired token
-        # by the time they fire (AADSTS700024 observed empirically on the
+        # MLI-177 follow-up: matrix steps can exceed the 5-15 min OIDC
+        # federated-token window. The original azure/login at the top of
+        # the job leaves post-matrix az commands using an expired token by
+        # the time they fire (AADSTS700024 observed empirically on the
         # 2026-05-11 long run). Re-minting here is the cheapest reliable
         # fix; one refresh covers the blob upload + rotate + verify steps
         # below — they all fire within seconds of this login.
@@ -310,3 +312,94 @@ jobs:
             echo "- **Seed blob:** \`${STORAGE_ACCOUNT}/${SEED_CONTAINER}/${SEED_BLOB}\`"
             echo "- **Commit:** \`${{ github.sha }}\`"
           } >> "$GITHUB_STEP_SUMMARY"
+
+  acceptance:
+    name: Slice acceptance tests (pytest)
+    needs: seed
+    runs-on: ubuntu-latest
+    # MLI-178: slice-2 acceptance test (`mmfp/tests/test_matrix_run.py`)
+    # calls real Foundry via the engine — gating here piggybacks on the
+    # seed run's already-active Foundry window. Originally gated in the
+    # seed job; MLI-359 moved it to a separate job so that a failing test
+    # no longer skips blob-upload and verify. Foundry cost still roughly
+    # doubles per workflow run (the test re-walks the same cells the CLI
+    # ran above) — acceptable because baseline-matrix.yml runs only on
+    # merge to main + workflow_dispatch, not per PR.
+    #
+    # NOTE: this job is expected to stay red until the sibling MLI-360
+    # test-fix lands. That is deliberate-red, not a regression from this
+    # change. ci.yml's slice-acceptance-tests job already ran this test
+    # with soft-fail; the hard-fail here is the new signal.
+    timeout-minutes: 90
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      KV_NAME: kv-uks-mmfp-dev
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install package
+        run: pip install -e .
+
+      - name: Install pytest
+        run: pip install "pytest>=8"
+
+      - name: Log in to Azure (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Fetch Foundry credentials from Key Vault
+        # The slice-2 acceptance test drives MatrixEngine against real
+        # Foundry deployments; FOUNDRY_ACCOUNT_KEY is required. Mirrors
+        # the seed job's step byte-for-byte so the test has the same
+        # credential environment it had in the single-job version.
+        run: |
+          set -euo pipefail
+          FOUNDRY_KEY=$(az keyvault secret show \
+            --vault-name "$KV_NAME" --name foundry-account-key \
+            --query value -o tsv)
+          echo "::add-mask::$FOUNDRY_KEY"
+          echo "FOUNDRY_ACCOUNT_KEY=$FOUNDRY_KEY" >> "$GITHUB_ENV"
+
+          if FOUNDRY_ENDPOINT=$(az keyvault secret show \
+              --vault-name "$KV_NAME" --name foundry-account-endpoint \
+              --query value -o tsv 2>/dev/null); then
+            echo "::add-mask::$FOUNDRY_ENDPOINT"
+            echo "FOUNDRY_ACCOUNT_ENDPOINT=$FOUNDRY_ENDPOINT" >> "$GITHUB_ENV"
+          else
+            echo "::notice::foundry-account-endpoint not present in $KV_NAME; binding will use candidates.yaml endpoint"
+          fi
+
+      - name: Fetch LangSmith credentials (non-fatal)
+        # Mirrors the seed job's step — preserves the tracing environment
+        # the test had in the single-job version. Non-fatal: quota
+        # exhaustion or a missing secret must not block the acceptance gate.
+        run: |
+          set -euo pipefail
+          if LANGSMITH_KEY=$(az keyvault secret show \
+              --vault-name "$KV_NAME" --name langsmith-api-key \
+              --query value -o tsv 2>/dev/null); then
+            echo "::add-mask::$LANGSMITH_KEY"
+            {
+              echo "LANGSMITH_API_KEY=$LANGSMITH_KEY"
+              echo "LANGSMITH_TRACING=true"
+              echo "LANGSMITH_PROJECT=mmfp-mli-dev"
+              echo "LANGSMITH_ENDPOINT=https://eu.api.smith.langchain.com"
+            } >> "$GITHUB_ENV"
+          else
+            echo "::warning::LangSmith API key unavailable from $KV_NAME — acceptance test will run without tracing"
+          fi
+
+      - name: Run slice-acceptance pytest (hard gate)
+        run: |
+          set -euo pipefail
+          pytest -m slice_acceptance mmfp/
