@@ -1,8 +1,9 @@
-"""Audit log model — the production-decision evidence trail (MLI-201).
+"""Audit log model — the production-decision trail (MLI-201).
 
 A candidate-status change (promote to primary/fallback, reject, revert) is
-recorded as one immutable `AuditLogEntry`. This is SOC-2 evidence material: it
-is cited in audits, not just "a log". See the MLI-199 / MLI-201
+recorded as one immutable `AuditLogEntry`. This is an authoritative,
+tamper-evident record of who changed a candidate's status and why — a
+data-integrity requirement, not just "a log". See the MLI-199 / MLI-201
 architectural-reality comments (2026-06-02) for the decisions baked in here.
 
 Two shapes, split by who owns each field:
