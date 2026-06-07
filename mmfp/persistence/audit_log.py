@@ -1,7 +1,9 @@
 """Append-only, hash-chained audit log for candidate status changes (MLI-201).
 
-Slice 5's production-decision evidence trail: every promote / reject / revert is
-one immutable record. SOC-2 evidence material — see the MLI-199 / MLI-201
+Slice 5's production-decision trail: every promote / reject / revert is one
+immutable record — an authoritative, tamper-evident account of who changed a
+candidate's status and why, that downstream readers can trust to be complete and
+unaltered. A data-integrity requirement; see the MLI-199 / MLI-201
 architectural-reality comments (2026-06-02). Decisions ratified on MLI-201:
 
   * **Durable, off local SQLite (store shape C).** Records persist to a durable
@@ -25,8 +27,8 @@ architectural-reality comments (2026-06-02). Decisions ratified on MLI-201:
     ``Storage Blob Data Contributor``, which can delete, so a compromised
     identity could still destroy blobs — what it cannot do is silently alter one
     and have the chain still verify. WORM / immutability-policy on the dedicated
-    container is the named infra fast-follow if SOC-2 requires resistance, not
-    just evidence. We do NOT claim WORM here.
+    container is the named infra fast-follow if we later need tamper-RESISTANCE,
+    not just tamper-evidence. We do NOT claim WORM here.
 
   * **Key design for the History access pattern.** Entry names are
     ``<product>/promotion-audit/<tier_id>/<candidate>/<compact_ts>-<seq>-<id>.json``.
@@ -378,8 +380,8 @@ def get_audit_log_repository(
             "Durable audit-log storage is not configured in the deployed "
             f"environment: set {ACCOUNT_URL_ENV} and {CONTAINER_ENV} on the "
             "Container App. Refusing to fall back to ephemeral local disk for "
-            "SOC-2 audit evidence — an authoritative-looking log that vanishes "
-            "on restart is worse than none."
+            "the audit trail — an authoritative-looking log that vanishes on "
+            "restart is worse than none."
         )
     local_dir = os.environ.get(LOCAL_DIR_ENV, _DEFAULT_LOCAL_DIR)
     return AuditLogRepository(DiskBlobSeam(local_dir), clock=clock)

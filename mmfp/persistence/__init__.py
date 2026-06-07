@@ -5,8 +5,9 @@ repository pattern here is the precedent every other persisted model follows.
 
 The Slice-5 audit log (MLI-201) reuses the *module shape* but a durable Azure
 Blob backing store rather than SQLite — the deployed Container App filesystem is
-ephemeral, so SOC-2 audit evidence must survive a revision restart (the MLI-365
-lesson). It lives in `audit_log.py` on the low-level seam in `blob_seam.py`.
+ephemeral, so the audit trail must survive a revision restart (the MLI-365
+lesson) to stay complete and tamper-evident. It lives in `audit_log.py` on the
+low-level seam in `blob_seam.py`.
 See MFP-ADR-004 (Confluence: Architecture Decision Records) for the
 matrix-run design rationale.
 """
