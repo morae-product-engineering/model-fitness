@@ -37,6 +37,10 @@ from mmfp.models.candidate import (
     TierId,
 )
 from mmfp.persistence import MatrixRunRepository
+from mmfp.persistence.candidate_status import CandidateStatusStore
+from mmfp.persistence.candidate_status import (
+    get_candidate_status_store as _get_candidate_status_store,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -110,6 +114,13 @@ def get_candidate_loader() -> Callable[[str], list[Candidate]]:
     return _load
 
 
+def get_candidate_status_store() -> CandidateStatusStore:
+    """Thin no-args wrapper so FastAPI doesn't try to schema the ``clock``
+    Callable parameter on the underlying factory (MLI-202). Tests override
+    this symbol via ``dependency_overrides``."""
+    return _get_candidate_status_store()
+
+
 # ---------------------------------------------------------------------------
 # Route
 # ---------------------------------------------------------------------------
@@ -126,11 +137,18 @@ def get_scoreboard(
     candidate_loader: Annotated[
         Callable[[str], list[Candidate]], Depends(get_candidate_loader)
     ],
+    status_store: Annotated[CandidateStatusStore, Depends(get_candidate_status_store)],
 ) -> ScoreboardResponse:
     """Return the latest MatrixRun for `product` as a ranked per-tier scorecard.
 
     404 if the product's candidate slate doesn't exist (unknown product) or
     if no matrix runs have been recorded for this product yet.
+
+    Per-tier status overlay (MLI-202): for each (tier_id, candidate) the
+    scoreboard looks up the durable status store. If a record exists its
+    ``status`` is used; otherwise the candidate's seed status from
+    candidates.yaml is the fallback. With an empty store (no overrides written)
+    every lookup returns None and behaviour is unchanged from pre-MLI-202.
     """
     # Validate product by loading the slate — we need it anyway for enrichment,
     # so the existence check is free (P1: earn complexity).
@@ -182,13 +200,21 @@ def get_scoreboard(
                     )
                 )
             else:
+                # Overlay: use the durable status store's per-tier record when
+                # present; fall back to the candidate's seed status otherwise.
+                status_rec = status_store.get(
+                    product=product,
+                    tier_id=tier_id,
+                    candidate=cand.binding.deployment,
+                )
+                effective_status = status_rec.status if status_rec else cand.status
                 sc_candidates.append(
                     ScoreboardCandidate(
                         candidate_id=cand.id,
                         display_name=cand.display_name,
                         family=cand.family,
                         deployment=cand.binding.deployment,
-                        status=cand.status,
+                        status=effective_status,
                         weighted_score=card.weighted_score,
                         per_dimension=card.per_dimension,
                     )
