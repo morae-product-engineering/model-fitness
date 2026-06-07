@@ -5,7 +5,7 @@ Morae's AI products need to make recurring decisions about which model to use fo
 ## Links
 
 - Jira epic: [MLI-104](https://morae.atlassian.net/browse/MLI-104)
-- Confluence: [Model Fitness Platform](https://morae.atlassian.net/wiki/spaces/MLI/pages/213549111/Model+Fitness+Platform)
+- Confluence: [Model Fitness Platform](https://morae.atlassian.net/wiki/spaces/MMFP/overview)
 - Agent guidance: [CLAUDE.md](CLAUDE.md)
 
 ## Dev quickstart
