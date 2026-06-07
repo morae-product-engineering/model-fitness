@@ -308,16 +308,27 @@ jobs:
       # explicit dispatch. `changes_detected` is the action's documented
       # output and is 'true' only when there was a diff under file_pattern,
       # so this is a no-op when the render produced identical output.
+      #
+      # commit_sha MUST be the auto-commit's hash, not context.sha. context.sha
+      # is the triggering push commit, which predates the rendered exports —
+      # confluence-sync pins its checkout to this SHA, so passing context.sha
+      # makes it check out the commit *before* the SVGs were committed. With
+      # only the three long-standing views that merely published one render
+      # stale; the moment a brand-new view was added its SVG was absent at
+      # context.sha and the sync's presence check failed outright. The
+      # auto-commit action exposes the freshly-committed SHA as commit_hash.
       - name: Trigger Confluence sync
         if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.auto-commit.outputs.changes_detected == 'true'
         uses: actions/github-script@v7
+        env:
+          EXPORTS_COMMIT_SHA: ${{ steps.auto-commit.outputs.commit_hash }}
         with:
           script: |
             await github.rest.repos.createDispatchEvent({
               owner: context.repo.owner,
               repo: context.repo.repo,
               event_type: 'confluence-sync-needed',
-              client_payload: { commit_sha: context.sha }
+              client_payload: { commit_sha: process.env.EXPORTS_COMMIT_SHA }
             });
 
   # ---------------------------------------------------------------------------
