@@ -1,1 +1,0 @@
-Primitives for tracing, metrics, and structured logging used throughout the platform. Provides a thin abstraction over Application Insights (production) and local stdout (development) so instrumentation calls in business logic don't import provider-specific SDKs directly. Follows the logging conventions in CLAUDE.md — boundaries, not line-by-line narration.

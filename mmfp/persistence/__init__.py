@@ -7,7 +7,8 @@ The Slice-5 audit log (MLI-201) reuses the *module shape* but a durable Azure
 Blob backing store rather than SQLite — the deployed Container App filesystem is
 ephemeral, so SOC-2 audit evidence must survive a revision restart (the MLI-365
 lesson). It lives in `audit_log.py` on the low-level seam in `blob_seam.py`.
-See ADRs/0001-sqlite-persistence.md for the matrix-run design rationale.
+See MFP-ADR-004 (Confluence: Architecture Decision Records) for the
+matrix-run design rationale.
 """
 
 from mmfp.persistence.audit_log import (

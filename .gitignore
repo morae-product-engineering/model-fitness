@@ -29,10 +29,6 @@ htmlcov/
 .coverage
 *.cover
 
-# Generated docs exports (tracked folder, gitignored content)
-docs/exports/*
-!docs/exports/.gitkeep
-
 # macOS
 .DS_Store
 **/.DS_Store

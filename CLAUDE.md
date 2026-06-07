@@ -105,7 +105,7 @@ If you're running as the wrong tier — the prompt is more ambiguous than the re
 **Logs:** structured (`structlog` for Python, `pino` for TS — confirm if a different one is already established). Log at boundaries: API request received, external call made, external call returned. Never log secrets, full request bodies that may contain user data, or full LLM completions in production paths.
 
 **Tests:**
-- Unit — next to the code (`mmfp/core/tests/test_foo.py`, `ui/components/Foo.test.tsx`). Mock external dependencies.
+- Unit — next to the code (`mmfp/engine/tests/test_foo.py`, `ui/components/Foo.test.tsx`). Mock external dependencies.
 - Integration — `mmfp/tests/`. Real-but-local dependencies (real SQLite, mocked HTTP).
 - E2E — `tests/e2e/`. Playwright against the deployed dev environment. One per slice as the slice acceptance test.
 
@@ -119,7 +119,7 @@ All tests deterministic — no wall-clock dependence, no unfixed random seeds, n
 
 ## ADRs
 
-`ADRs/` directory, MADR format, one page max, filename `NNNN-short-decision-title.md`. If a sub-task's acceptance includes an ADR, draft it first, get it reviewed, then implement. Don't reuse numbers from superseded ADRs — supersede the old, take the next free number.
+ADRs live in Confluence (MMFP space → **Architecture Decision Records**), identified `MFP-ADR-NNN`. If a sub-task's acceptance includes an ADR, draft it there first, get it reviewed, then implement. Don't reuse numbers from superseded ADRs — supersede the old, take the next free number.
 
 ## Dev-environment access
 

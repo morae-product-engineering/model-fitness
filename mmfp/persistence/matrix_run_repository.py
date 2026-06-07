@@ -4,7 +4,7 @@ The matrix engine (MLI-172) emits in-memory `MatrixRun` artefacts; this
 module persists them. The Scoreboard API (MLI-174) and CI seed job
 (MLI-177) read through the same surface.
 
-Design choices live in ADRs/0001-sqlite-persistence.md:
+Design choices live in MFP-ADR-004 (Confluence: Architecture Decision Records):
   * Hand-rolled SQL migration files, idempotent CREATE IF NOT EXISTS.
   * Decimals + Any-typed payload preserved by storing each
     `MatrixRunResult` as a Pydantic JSON blob; round-trip through
