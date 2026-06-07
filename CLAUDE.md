@@ -41,7 +41,7 @@ These map to MLI architectural principles P1, P3, P7, P9.
 | Modify the public contract of a P3 plugin interface    | Implementation is yours; signatures need explicit human approval      |
 | Delete or rename files outside the sub-task scope      | Ask before touching anything not in the sub-task brief                |
 
-P3 plugin interfaces: `EvaluatorPlugin`, `BindingPlugin`, `ReporterPlugin`, `SensorPlugin`.
+P3 plugin interfaces: `EvaluatorPlugin`, `BindingPlugin`.
 
 ## Default workflow per sub-task
 
@@ -78,7 +78,6 @@ The human (Wayne) reviews, merges, and transitions to `Done`. **Don't transition
 | Modify a P3 plugin interface                                 | Ask.                                  |
 | Modify CI workflows or infra outside the sub-task scope      | Ask.                                  |
 | Change the test surface of an existing test                  | Ask.                                  |
-| New architectural concept without an ADR                     | Propose the ADR first; don't bury it. |
 | Naming, structuring, idioms within an existing language      | Decide.                               |
 | Add tests, refactor for clarity within a tested unit         | Decide.                               |
 | New file in a clearly-scoped location                        | Decide.                               |
@@ -117,20 +116,17 @@ Slice acceptance tests can fail with different errors locally vs in CI depending
 
 All tests deterministic — no wall-clock dependence, no unfixed random seeds, no order-dependence. The TestRail reporter (`tests/reporters/testrail-reporter.ts`) auto-creates cases from Playwright titles. Test code is the source of truth — don't manually create cases in TestRail.
 
-## ADRs
-
-ADRs live in Confluence (MMFP space → **Architecture Decision Records**), identified `MFP-ADR-NNN`. If a sub-task's acceptance includes an ADR, draft it there first, get it reviewed, then implement. Don't reuse numbers from superseded ADRs — supersede the old, take the next free number.
-
 ## Dev-environment access
 
 The dev UI (Container App `ca-mmfp-ui-dev`) sits behind HTTP Basic Auth as an interim access gate. Credentials live in 1Password under `MMFP / dev UI basic auth`; the running container reads them from the `BASIC_AUTH_USER` / `BASIC_AUTH_PASS` env vars wired to Key Vault secrets `basic-auth-user` and `basic-auth-pass`. The middleware lives in [ui/middleware.ts](ui/middleware.ts) and is intentionally fail-closed and easily removable — it is temporary, pending the Entra SSO migration tracked in [TODO: link]. Removal steps are listed in the `AUTH-REMOVAL` block at the top of that file.
 
 ## References
 
-- Product hypothesis — https://morae.atlassian.net/wiki/spaces/MLI/pages/213549111/Model+Fitness+Platform
+- Product hypothesis — https://morae.atlassian.net/wiki/spaces/MMFP/overview
 - Architecture — https://morae.atlassian.net/wiki/spaces/MLI/pages/218530029/MFP+Architecture
 - Architectural principles (P1–P10) — https://morae.atlassian.net/wiki/spaces/MLI/pages/146571276/Architectural+Principles
 - Rubric reference (v0.1) — https://morae.atlassian.net/wiki/spaces/MLI/pages/218628525/Model+Fitness+Rubric+-+Reference+Document
+- Architecture Decision Records — Confluence, MMFP space → **Architecture Decision Records** (`MFP-ADR-NNN`)
 
 ## When this file is wrong
 
