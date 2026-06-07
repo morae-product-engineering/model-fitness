@@ -1,8 +1,8 @@
 -- 0001_initial.sql — MatrixRun / MatrixRunResult tables (MLI-258).
 --
 -- Idempotent: every statement uses IF NOT EXISTS so first-run and
--- already-migrated DBs converge to the same state. See
--- ADRs/0001-sqlite-persistence.md for the shape rationale (TEXT for
+-- already-migrated DBs converge to the same state. See MFP-ADR-004
+-- (Confluence: Architecture Decision Records) for the shape rationale (TEXT for
 -- ISO-8601 datetimes, JSON blob for evolving MatrixRunResult payload).
 
 CREATE TABLE IF NOT EXISTS matrix_runs (

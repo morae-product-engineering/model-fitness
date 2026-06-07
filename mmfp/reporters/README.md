@@ -1,1 +1,0 @@
-Output sink implementations that publish evaluation results to external systems. Each reporter implements `ReporterPlugin` from `mmfp/plugins/` and handles a specific destination — LangSmith for agent quality traces, file output for offline archiving, console output for local development. Reporters are called after a `MatrixRun` completes.

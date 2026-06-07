@@ -60,7 +60,7 @@ Persistence
 By default returns an in-memory `MatrixRun`; pass `repository=` and
 `product=` to `run()` to persist on success. Persistence is opt-in
 because the unit-test path doesn't need a DB. See MLI-258 and
-ADRs/0001-sqlite-persistence.md for the storage contract.
+MFP-ADR-004 (Confluence: Architecture Decision Records) for the storage contract.
 """
 
 from __future__ import annotations

@@ -1,1 +1,0 @@
-Tests that the platform conforms to its own architectural principles (self-fitness). Verifies properties like determinism of matrix runs, rubric versioning invariants, and cost transparency — the platform must satisfy the same quality bar it applies to candidate models. If the platform cannot pass its own rubric, the rubric is wrong.
