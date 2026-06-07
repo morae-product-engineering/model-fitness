@@ -28,7 +28,7 @@ Required environment variables:
     CONFLUENCE_API_TOKEN  - API token (secret)
     CONFLUENCE_USER_EMAIL - Atlassian account email tied to the token
     CONFLUENCE_BASE_URL   - e.g. https://morae.atlassian.net
-    CONFLUENCE_PAGE_ID    - target page id (e.g. 218530029)
+    CONFLUENCE_PAGE_ID    - target page id (e.g. 252280993)
 
 Optional:
     GITHUB_STEP_SUMMARY   - path to a markdown file appended for the run
@@ -57,6 +57,7 @@ EXPECTED_SVGS: tuple[str, ...] = (
     "structurizr-SystemContext.svg",
     "structurizr-Containers.svg",
     "structurizr-MatrixRun.svg",
+    "structurizr-Deployment.svg",
 )
 
 SVG_DIR = Path("docs/architecture/exports/svg")
@@ -79,6 +80,8 @@ EMBED_BLOCK = (
     '<ac:image><ri:attachment ri:filename="structurizr-Containers.svg" /></ac:image>'
     "<h3>Matrix run (dynamic)</h3>"
     '<ac:image><ri:attachment ri:filename="structurizr-MatrixRun.svg" /></ac:image>'
+    "<h3>Deployment (Azure)</h3>"
+    '<ac:image><ri:attachment ri:filename="structurizr-Deployment.svg" /></ac:image>'
 )
 
 # Heading text we replace on first run. Match is case-insensitive against
