@@ -48,11 +48,11 @@ P3 plugin interfaces: `EvaluatorPlugin`, `BindingPlugin`.
 1. Read the Jira sub-task in full via the Atlassian MCP. If anything is ambiguous, ask before starting.
 2. Read the parent slice task to see what slice you're contributing to.
 3. `tree -L 3` to see what already exists. Don't duplicate; don't break what you don't need to touch.
-4. Branch from the sub-task ID: `MLI-XXX/<short-description>` (e.g. `MLI-218/playwright-reporter`).
+4. Branch from the sub-task ID: `MFP-XXX/<short-description>` (e.g. `MFP-32/playwright-reporter`).
 5. Write the test first (or confirm one exists).
 6. Implement the smallest thing that makes it pass.
 7. Refactor only against a green test.
-8. Commit small. Imperative tense, ≤72 chars first line, reference the Jira ID: `Add Playwright reporter (MLI-218)`.
+8. Commit small. Imperative tense, ≤72 chars first line, reference the Jira ID: `Add Playwright reporter (MFP-32)`.
 9. Open a PR. Summarise *what* and *why*; link the Jira sub-task.
 10. Close the loop in Jira (next section).
 
@@ -99,7 +99,7 @@ If you're running as the wrong tier — the prompt is more ambiguous than the re
 
 ## Comments, logs, tests
 
-**Comments:** explain *why*, not *what*. Type hints and pydantic descriptions cover *what*. Mark assumptions explicitly: `# ASSUMES: caller has validated rubric_version`. TODOs reference Jira: `# TODO(MLI-242): replace with rubric.fetch_active()`.
+**Comments:** explain *why*, not *what*. Type hints and pydantic descriptions cover *what*. Mark assumptions explicitly: `# ASSUMES: caller has validated rubric_version`. TODOs reference Jira: `# TODO(MFP-NNN): replace with rubric.fetch_active()`.
 
 **Logs:** structured (`structlog` for Python, `pino` for TS — confirm if a different one is already established). Log at boundaries: API request received, external call made, external call returned. Never log secrets, full request bodies that may contain user data, or full LLM completions in production paths.
 
@@ -110,7 +110,7 @@ If you're running as the wrong tier — the prompt is more ambiguous than the re
 
 **Slice acceptance tests:** Tests that gate a slice's completion (deliberately red until the slice's implementation lands) are marked with `@pytest.mark.slice_acceptance` (or module-level `pytestmark = pytest.mark.slice_acceptance`). The standard `Unit Tests (pytest)` CI job excludes them; a separate `Slice Acceptance Tests (pytest)` job runs them with `continue-on-error: true` so deliberate-red doesn't block downstream CI. When the slice's implementation lands and the test goes green, the marker stays on the file — its purpose is identification, not a temporary skip.
 
-**Defer imports of not-yet-existent symbols into the test body**, not the module top-level. Module-level imports that fail (`from mmfp.engine.matrix import MatrixEngine` before MLI-172 lands) cause pytest collection to fail BEFORE `-m` filtering can deselect the test, blocking the whole pipeline. With the import inside the test body, the file collects cleanly, the test FAILs (assertion-time) rather than ERRORs (collection-time), and `-m` filtering works as designed.
+**Defer imports of not-yet-existent symbols into the test body**, not the module top-level. Module-level imports that fail (`from mmfp.engine.matrix import MatrixEngine` before MFP-39 lands) cause pytest collection to fail BEFORE `-m` filtering can deselect the test, blocking the whole pipeline. With the import inside the test body, the file collects cleanly, the test FAILs (assertion-time) rather than ERRORs (collection-time), and `-m` filtering works as designed.
 
 Slice acceptance tests can fail with different errors locally vs in CI depending on what's missing (missing fixtures, missing engine, missing UI). All such failures are correct deliberate-red. Document the expected failure modes in the test file's docstring so a future engineer debugging "why is this red?" finds the answer is "because it's supposed to be."
 
@@ -123,9 +123,9 @@ The dev UI (Container App `ca-mmfp-ui-dev`) sits behind HTTP Basic Auth as an in
 ## References
 
 - Product hypothesis — https://morae.atlassian.net/wiki/spaces/MMFP/overview
-- Architecture — https://morae.atlassian.net/wiki/spaces/MLI/pages/218530029/MFP+Architecture
+- Architecture — https://morae.atlassian.net/wiki/spaces/MMFP/pages/218530029/System+Architecture
 - Architectural principles (P1–P10) — https://morae.atlassian.net/wiki/spaces/MLI/pages/146571276/Architectural+Principles
-- Rubric reference (v0.1) — https://morae.atlassian.net/wiki/spaces/MLI/pages/218628525/Model+Fitness+Rubric+-+Reference+Document
+- Rubric reference — https://morae.atlassian.net/wiki/spaces/MMFP/pages/218628525/Model+Scoring+Framework+Reference
 - Architecture Decision Records — Confluence, MMFP space → **Architecture Decision Records** (`MFP-ADR-NNN`)
 
 ## When this file is wrong
