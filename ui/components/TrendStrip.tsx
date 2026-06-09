@@ -116,6 +116,24 @@ export default function TrendStrip({ tierId, runs, candidates }: TrendStripProps
   const hoveredRun =
     hover != null ? chronoRuns[hover.runIdx] : null;
 
+  // Snap tooltip alignment to avoid clipping at the left/right edges.
+  // <25% of chart width → left-align from the point; >75% → right-align; else centre.
+  const tooltipStyle: React.CSSProperties = (() => {
+    if (!hoveredPoint) return {};
+    const xPct = (hoveredPoint.x / WIDTH) * 100;
+    if (xPct < 25) {
+      return { top: 0, left: `calc(${xPct}% + 1.25rem)`, transform: "translateY(-4px)" };
+    }
+    if (xPct > 75) {
+      return {
+        top: 0,
+        right: `calc(${(1 - hoveredPoint.x / WIDTH) * 100}% + 1.25rem)`,
+        transform: "translateY(-4px)",
+      };
+    }
+    return { top: 0, left: `calc(${xPct}% + 1.25rem)`, transform: "translate(-50%, -4px)" };
+  })();
+
   // Y-axis reference ticks at fixed scores.
   const Y_TICKS = [0, 50, 100];
 
@@ -264,13 +282,7 @@ export default function TrendStrip({ tierId, runs, candidates }: TrendStripProps
           role="tooltip"
           data-testid={`tier-${tierId}-trend-tooltip`}
           className="absolute z-10 pointer-events-none bg-neutral-1 text-white text-xs rounded px-2 py-1 shadow-md"
-          style={{
-            // Position above the hovered point. Coordinates inside the SVG are
-            // viewBox units; convert by % of width and add the padding offset.
-            left: `calc(${(hoveredPoint.x / WIDTH) * 100}% + 1.25rem)`,
-            top: 0,
-            transform: "translate(-50%, -4px)",
-          }}
+          style={tooltipStyle}
         >
           <div className="font-medium">
             {hoveredCandidate.candidate.display_name}
