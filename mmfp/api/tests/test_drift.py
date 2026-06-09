@@ -17,7 +17,6 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-
 # Deferred imports per CLAUDE.md — keeps collection clean if module is absent.
 
 
@@ -52,8 +51,8 @@ def _make_signal(
 @pytest.fixture()
 def client(tmp_path: Path):
     """TestClient with DriftSignalStore overridden to use a tmp SQLite db."""
-    from mmfp.api.main import app
     from mmfp.api import drift as drift_module
+    from mmfp.api.main import app
     from mmfp.persistence.drift_store import DriftSignalStore
 
     store = DriftSignalStore(tmp_path / "drift.db")
@@ -66,8 +65,8 @@ def client(tmp_path: Path):
 @pytest.fixture()
 def seeded_client(tmp_path: Path):
     """Client with two active signals plus one acknowledged, one other product."""
-    from mmfp.api.main import app
     from mmfp.api import drift as drift_module
+    from mmfp.api.main import app
     from mmfp.persistence.drift_store import DriftSignalStore
 
     store = DriftSignalStore(tmp_path / "drift.db")
