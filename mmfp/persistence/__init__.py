@@ -23,6 +23,7 @@ from mmfp.persistence.candidate_status import (
     CandidateStatusVersionConflict,
     get_candidate_status_store,
 )
+from mmfp.persistence.drift_store import DriftSignalStore
 from mmfp.persistence.matrix_run_repository import MatrixRunRepository
 
 __all__ = [
@@ -31,6 +32,7 @@ __all__ = [
     "CandidateStatusConfigError",
     "CandidateStatusStore",
     "CandidateStatusVersionConflict",
+    "DriftSignalStore",
     "MatrixRunRepository",
     "get_audit_log_repository",
     "get_candidate_status_store",
