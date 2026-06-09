@@ -584,6 +584,8 @@ class MatrixEngine:
             "latency_ms": response.latency_ms,
             "candidate_context_window": candidate.context_window,
             "cost_usd": Decimal("0"),
+            "candidate_id": candidate.id,
+            "run_id": run_id,
         }
 
         @traceable(name="evaluator.evaluate", run_type="tool")
