@@ -206,7 +206,7 @@ function StatusChangeCard({ entry }: { entry: AuditEntry }) {
         <span className="text-neutral-6">Rubric</span>
         <span className="font-mono text-neutral-5">{entry.rubric_version_at_time}</span>
       </div>
-      <p className="text-neutral-2 leading-snug">"{entry.rationale}"</p>
+      <p className="text-neutral-2 leading-snug">&ldquo;{entry.rationale}&rdquo;</p>
       <p className="text-neutral-6 mt-1.5 font-mono text-[10px]">{entry.actor}</p>
     </div>
   );
@@ -233,7 +233,7 @@ function RubricSaveCard({ entry }: { entry: RubricAuditRecord }) {
         </span>
       </div>
       {entry.note && (
-        <p className="text-neutral-2 leading-snug">"{entry.note}"</p>
+        <p className="text-neutral-2 leading-snug">&ldquo;{entry.note}&rdquo;</p>
       )}
       <p className="text-neutral-6 mt-1.5 font-mono text-[10px]">{entry.steward}</p>
     </div>

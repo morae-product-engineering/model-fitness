@@ -614,7 +614,7 @@ function AuditEntryRow({ entry }: { entry: AuditEntry }) {
         </span>
         <span className="font-mono text-neutral-6 text-[10px]">{dateLabel}</span>
       </div>
-      <p className="text-neutral-3 leading-snug">"{entry.rationale}"</p>
+      <p className="text-neutral-3 leading-snug">&ldquo;{entry.rationale}&rdquo;</p>
       <p className="text-neutral-6 mt-1 font-mono text-[10px]">{entry.actor}</p>
     </div>
   );
