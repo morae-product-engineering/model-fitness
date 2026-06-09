@@ -19,6 +19,7 @@
 // — the drill-down requires both to construct the candidate-detail URL.
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Candidate,
   Family,
@@ -49,6 +50,7 @@ export default function Scorecard({
   apiBaseUrl,
 }: ScorecardProps) {
   const [selected, setSelected] = useState<Candidate | null>(null);
+  const router = useRouter();
   const drillDownEnabled = Boolean(product && apiBaseUrl);
   if (candidates.length === 0) {
     return null;
@@ -181,6 +183,7 @@ export default function Scorecard({
           tierId={tierId}
           apiBaseUrl={apiBaseUrl}
           onClose={() => setSelected(null)}
+          onStatusChange={() => router.refresh()}
         />
       )}
     </div>

@@ -23,10 +23,10 @@ from __future__ import annotations
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
-from mmfp.api.rubric_store import RubricNotFound, RubricStore, get_rubric_store
+from mmfp.api.rubric_store import AuditRecord, RubricNotFound, RubricStore, get_rubric_store
 from mmfp.models.rubric import Rubric
 
 router = APIRouter(tags=["rubric"])
@@ -41,6 +41,11 @@ class RubricReadResponse(BaseModel):
     product: str
     version: str
     rubric: dict[str, Any]
+
+
+class RubricAuditResponse(BaseModel):
+    product: str
+    entries: list[AuditRecord]
 
 
 # ---------------------------------------------------------------------------
@@ -81,3 +86,22 @@ def get_rubric(
         version=rubric.version,
         rubric=rubric.model_dump(mode="json"),
     )
+
+
+@router.get(
+    "/api/products/{product}/rubric-audit",
+    response_model=RubricAuditResponse,
+    summary="List rubric save events for a product, newest-first",
+)
+def get_rubric_audit(
+    product: str,
+    store: Annotated[RubricStore, Depends(get_rubric_store)],
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+) -> RubricAuditResponse:
+    """Return the most recent rubric save audit records for ``product``.
+
+    Each entry captures the version delta, note, steward identity, and
+    timestamp of one rubric save. Empty list when no saves have been made yet.
+    """
+    entries = store.list_audit(product, limit=limit)
+    return RubricAuditResponse(product=product, entries=entries)

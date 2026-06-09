@@ -17,7 +17,7 @@ const TABS: TabSpec[] = [
   { id: "scoreboard", label: "Scoreboard", href: "/scoreboard?product=mli" },
   { id: "editor", label: "Editor", href: "/editor?product=mli" },
   { id: "curator", label: "Curator", href: "/curator?product=mli" },
-  { id: "history", label: "History" },
+  { id: "history", label: "History", href: "/history?product=mli" },
 ];
 
 interface TabNavProps {
