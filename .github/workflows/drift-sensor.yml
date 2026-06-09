@@ -1,0 +1,169 @@
+# Drift sensor scheduled run (MFP-99)
+#
+# Fetches live samples from LangSmith for each candidate/tier in the MLI
+# product config, compares them against the latest baseline run in the seed
+# database, and writes drift signals as JSON files for the API to serve.
+#
+# Triggers:
+#   - schedule daily at 06:00 UTC — keeps the dev signal store fresh.
+#   - workflow_dispatch           — ad-hoc manual run or after a re-seed.
+#
+# Skip pattern (P9 — exit 0, never fail the pipeline):
+#   Missing Azure config (AZURE_CLIENT_ID / MMFP_SEED_STORAGE_ACCOUNT) →
+#     step writes a summary and exits 0; subsequent steps are all gated on
+#     env.config_ok == 'true' and are skipped.
+#   Missing LANGSMITH_API_KEY from Key Vault → the run-sensor script detects
+#     the absent env var and exits 0 with a skip summary.
+#   Missing seed blob (baseline-matrix.yml not yet run) → script detects no
+#     DB file and exits 0 with a skip summary.
+#
+# This is the correct skip behaviour: LangSmith and the seed DB are absent
+# in early environments by design, not by error. Unlike confluence-sync.yml
+# (which treats missing config as an operator mistake and exits 1), we exit 0
+# so the scheduled trigger never pages anyone unnecessarily.
+#
+# Idempotency: each sensor run may produce new signal files. The script writes
+# new UUIDs per run so signals accumulate; a failed run leaves no partial files
+# (Python's write_text is atomic on POSIX). The API reads the full signals
+# directory; deduplication at display time is done by status filtering.
+#
+# Auth: OIDC federated credential, same as ci.yml / baseline-matrix.yml.
+
+name: Drift Sensor (scheduled)
+
+on:
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: drift-sensor-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  detect-drift:
+    name: Detect drift for candidates
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      KV_NAME: kv-uks-mmfp-dev
+      STORAGE_ACCOUNT: ${{ vars.MMFP_SEED_STORAGE_ACCOUNT }}
+      SEED_CONTAINER: mmfp-seed
+      SEED_BLOB: mli/mmfp.db
+      SIGNALS_CONTAINER: mmfp-drift
+      MMFP_DB_PATH: data/mmfp.db
+      MMFP_PRODUCTS_DIR: products
+      MMFP_DRIFT_DIR: data/drift
+      LANGSMITH_PROJECT: mmfp-drift-seed
+      LANGSMITH_ENDPOINT: https://eu.api.smith.langchain.com
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install package
+        run: pip install -e .
+
+      # Gate on Azure config being present. Missing config is a valid state for
+      # early environments — write a summary and skip the rest cleanly (exit 0).
+      - name: Check required config
+        env:
+          AZURE_CLIENT_ID_CHECK: ${{ secrets.AZURE_CLIENT_ID }}
+          STORAGE_ACCOUNT_CHECK: ${{ vars.MMFP_SEED_STORAGE_ACCOUNT }}
+        run: |
+          set -euo pipefail
+          missing=()
+          [ -n "${AZURE_CLIENT_ID_CHECK:-}" ]   || missing+=("AZURE_CLIENT_ID (secret)")
+          [ -n "${STORAGE_ACCOUNT_CHECK:-}" ]   || missing+=("MMFP_SEED_STORAGE_ACCOUNT (variable)")
+          if [ ${#missing[@]} -gt 0 ]; then
+            {
+              echo "### Drift sensor skipped — missing config"
+              echo ""
+              echo "Configure the following on the repository to enable the scheduled sensor:"
+              for item in "${missing[@]}"; do echo "- ${item}"; done
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::notice::Drift sensor skipped — missing config: ${missing[*]}"
+            exit 0
+          fi
+          echo "config_ok=true" >> "$GITHUB_ENV"
+
+      - name: Log in to Azure (OIDC)
+        if: env.config_ok == 'true'
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      # LangSmith provisioning may be pending; a missing key is expected and
+      # non-fatal. The sensor script detects the absent env var and skips.
+      - name: Fetch LangSmith credentials (non-fatal)
+        if: env.config_ok == 'true'
+        run: |
+          set -euo pipefail
+          if LANGSMITH_KEY=$(az keyvault secret show \
+              --vault-name "$KV_NAME" --name langsmith-api-key \
+              --query value -o tsv 2>/dev/null); then
+            echo "::add-mask::$LANGSMITH_KEY"
+            {
+              echo "LANGSMITH_API_KEY=$LANGSMITH_KEY"
+              echo "LANGSMITH_TRACING=false"
+            } >> "$GITHUB_ENV"
+          else
+            echo "::notice::LangSmith API key unavailable from $KV_NAME — sensor script will skip."
+          fi
+
+      # Download the latest seeded DB so the sensor can read baseline runs.
+      # Missing blob is non-fatal: the sensor script handles it with a clean skip.
+      - name: Download seed database (non-fatal)
+        if: env.config_ok == 'true'
+        run: |
+          set -euo pipefail
+          if az storage blob exists \
+              --account-name "$STORAGE_ACCOUNT" \
+              --container-name "$SEED_CONTAINER" \
+              --name "$SEED_BLOB" \
+              --auth-mode login \
+              --query exists -o tsv | grep -q true; then
+            mkdir -p data
+            az storage blob download \
+              --account-name "$STORAGE_ACCOUNT" \
+              --container-name "$SEED_CONTAINER" \
+              --name "$SEED_BLOB" \
+              --file "$MMFP_DB_PATH" \
+              --auth-mode login
+          else
+            echo "::notice::Seed blob $SEED_CONTAINER/$SEED_BLOB not found — sensor script will skip."
+          fi
+
+      - name: Run drift sensor
+        if: env.config_ok == 'true'
+        run: python scripts/run_drift_sensor.py --product mli
+
+      # Upload any produced signal files to blob so the dev API can serve them.
+      # Non-fatal: blob upload failure should not fail the sensor run.
+      - name: Upload signal files to blob (non-fatal)
+        if: env.config_ok == 'true'
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          DRIFT_DIR="${MMFP_DRIFT_DIR}/mli/signals"
+          if [ -d "$DRIFT_DIR" ] && [ "$(ls -A "$DRIFT_DIR" 2>/dev/null)" ]; then
+            az storage blob upload-batch \
+              --account-name "$STORAGE_ACCOUNT" \
+              --destination "${SIGNALS_CONTAINER}/mli/signals" \
+              --source "$DRIFT_DIR" \
+              --auth-mode login \
+              --overwrite
+          else
+            echo "No signal files produced — nothing to upload."
+          fi
