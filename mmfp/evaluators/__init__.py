@@ -19,6 +19,7 @@ from mmfp.evaluators.deterministic import (  # noqa: E402, F401
     regex_match,
     structured_output_reliability,
 )
+from mmfp.evaluators.inferential import llm_judge  # noqa: E402, F401
 from mmfp.evaluators.metric import (  # noqa: E402, F401
     cost_per_call,
     latency_p95,
