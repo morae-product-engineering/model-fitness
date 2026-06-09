@@ -11,6 +11,7 @@ import {
   TierId,
 } from "@/lib/scoreboard";
 import { resolveEnvLabel } from "@/lib/env";
+import { readRole } from "@/lib/roles";
 import TierCard from "@/components/TierCard";
 import AppShell from "@/components/AppShell";
 
@@ -25,7 +26,7 @@ type FetchResult =
   | { ok: false; error: string };
 
 function apiBaseUrl(): string {
-  return process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+  return process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
 }
 
 async function fetchScoreboard(product: string): Promise<FetchResult> {
@@ -86,6 +87,7 @@ interface PageProps {
 export default async function ScoreboardPage({ searchParams }: PageProps) {
   const product = searchParams.product ?? "mli";
   const env = resolveEnvLabel();
+  const role = readRole();
   const productMeta = { id: product, name: product.toUpperCase() };
   const result = await fetchScoreboard(product);
 
@@ -96,6 +98,7 @@ export default async function ScoreboardPage({ searchParams }: PageProps) {
         rubricVersion="—"
         product={productMeta}
         activeTab="scoreboard"
+        role={role}
       >
         <div className="flex items-center justify-center p-8">
           <div className="max-w-md w-full bg-white border border-neutral-11 rounded-lg p-6 shadow-sm">
@@ -141,6 +144,7 @@ export default async function ScoreboardPage({ searchParams }: PageProps) {
       rubricVersion={scoreboard.rubric_version}
       product={productMeta}
       activeTab="scoreboard"
+      role={role}
     >
       <div className="p-8">
         <div className="max-w-5xl mx-auto">

@@ -6,6 +6,7 @@
 
 import AppShell from "@/components/AppShell";
 import { resolveEnvLabel } from "@/lib/env";
+import { readRole } from "@/lib/roles";
 import { AuditEntry, RubricAuditRecord } from "@/lib/promotion";
 
 function apiBaseUrl(): string {
@@ -96,6 +97,7 @@ interface HistoryPageProps {
 export default async function HistoryPage({ searchParams }: HistoryPageProps) {
   const { product = "mli" } = await searchParams;
   const base = apiBaseUrl();
+  const role = readRole();
 
   const [statusChanges, rubricSaves, rubricVersion] = await Promise.all([
     fetchStatusChanges(base, product),
@@ -123,6 +125,7 @@ export default async function HistoryPage({ searchParams }: HistoryPageProps) {
       rubricVersion={rubricVersion}
       product={{ id: product, name: product.toUpperCase() }}
       activeTab="history"
+      role={role}
     >
       <div className="max-w-2xl mx-auto px-5 py-8">
         <h1 className="text-sm font-semibold text-neutral-1 mb-1">History</h1>

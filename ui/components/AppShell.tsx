@@ -4,6 +4,7 @@
 
 import MmfpHeader, { type MmfpHeaderProduct } from "./MmfpHeader";
 import TabNav, { type TabId } from "./TabNav";
+import type { Role } from "@/lib/roles";
 
 interface AppShellProps {
   env: string;
@@ -11,6 +12,7 @@ interface AppShellProps {
   rubricVersion: string;
   product: MmfpHeaderProduct;
   activeTab: TabId;
+  role?: Role;
   children: React.ReactNode;
 }
 
@@ -20,6 +22,7 @@ export default function AppShell({
   rubricVersion,
   product,
   activeTab,
+  role,
   children,
 }: AppShellProps) {
   return (
@@ -33,8 +36,9 @@ export default function AppShell({
         runId={runId}
         rubricVersion={rubricVersion}
         product={product}
+        role={role}
       />
-      <TabNav activeTab={activeTab} />
+      <TabNav activeTab={activeTab} role={role} />
       <main className="flex-1">{children}</main>
     </div>
   );

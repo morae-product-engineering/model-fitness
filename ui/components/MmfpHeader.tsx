@@ -12,6 +12,7 @@ import {
   IconExternal,
   IconGit,
 } from "./primitives/icons";
+import type { Role } from "@/lib/roles";
 
 export interface MmfpHeaderProduct {
   id: string;
@@ -23,6 +24,7 @@ interface MmfpHeaderProps {
   runId?: string;
   rubricVersion: string;
   product: MmfpHeaderProduct;
+  role?: Role;
 }
 
 export default function MmfpHeader({
@@ -30,6 +32,7 @@ export default function MmfpHeader({
   runId,
   rubricVersion,
   product,
+  role,
 }: MmfpHeaderProps) {
   return (
     <header
@@ -105,6 +108,23 @@ export default function MmfpHeader({
             <IconBeaker size={13} />
             {runId}
             <IconExternal size={11} color="var(--neutral-7)" />
+          </span>
+        )}
+        {role && (
+          <span
+            data-testid="role-badge"
+            style={{
+              fontSize: 11,
+              fontWeight: 600,
+              color: role === "steward" ? "var(--neutral-2)" : "var(--neutral-5)",
+              background: role === "steward" ? "var(--neutral-11)" : "var(--neutral-12)",
+              padding: "3px 8px",
+              borderRadius: 4,
+              fontFamily: "var(--font-mono)",
+              letterSpacing: 0.4,
+            }}
+          >
+            {role.toUpperCase()}
           </span>
         )}
         <span
