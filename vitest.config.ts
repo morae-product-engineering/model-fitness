@@ -16,6 +16,10 @@ export default defineConfig({
       // MLI-196: next/link resolves to ui/node_modules/next which carries its
       // own React instance, causing hook mismatch errors in component tests.
       'next/link': path.resolve(__dirname, 'tests/stubs/next-link.tsx'),
+      // MFP-98: next/headers is server-only; stub so tests that import
+      // server components (MonitorPage) can resolve the module, then
+      // override with vi.mock() where behaviour matters.
+      'next/headers': path.resolve(__dirname, 'tests/stubs/next-headers.ts'),
     },
   },
   test: {
