@@ -9,10 +9,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from mmfp.cli.__main__ import _make_judge_evaluator_factory
-from mmfp.models.rubric import JudgeConfig, Rubric
+from mmfp.models.rubric import JudgeConfig
 
 
 # ---------------------------------------------------------------------------
