@@ -175,7 +175,7 @@ export default async function ScoreboardPage({ searchParams }: PageProps) {
       role={role}
     >
       <div className="p-8">
-        <div className="max-w-5xl mx-auto">
+        <div className="w-full">
           {drift.active_count > 0 && (
             <div
               data-testid="drift-banner"

@@ -328,6 +328,128 @@ describe('Scorecard', () => {
     });
   });
 
+  // MFP-17 — status badges
+  describe('status badges', () => {
+    it('renders status-badge with data-status=under_evaluation for a default candidate', () => {
+      render(
+        <Scorecard tierId={TIER_1} candidates={[makeCandidate({ status: 'under_evaluation' })]} />,
+      );
+      const badge = screen.getByTestId('status-badge');
+      expect(badge).toHaveAttribute('data-status', 'under_evaluation');
+      expect(badge.textContent).toMatch(/under evaluation/i);
+    });
+
+    it('renders status-badge with data-status=approved_primary and gold style', () => {
+      render(
+        <Scorecard tierId={TIER_1} candidates={[makeCandidate({ status: 'approved_primary' })]} />,
+      );
+      const badge = screen.getByTestId('status-badge');
+      expect(badge).toHaveAttribute('data-status', 'approved_primary');
+      expect(badge.textContent).toMatch(/primary/i);
+      // Gold marker uses the yellow token — verify the class is present.
+      expect(badge.className).toContain('bg-yellow');
+    });
+
+    it('renders status-badge with data-status=approved_fallback and silver style', () => {
+      render(
+        <Scorecard tierId={TIER_1} candidates={[makeCandidate({ status: 'approved_fallback' })]} />,
+      );
+      const badge = screen.getByTestId('status-badge');
+      expect(badge).toHaveAttribute('data-status', 'approved_fallback');
+      expect(badge.textContent).toMatch(/fallback/i);
+      expect(badge.className).toContain('bg-neutral-4');
+    });
+
+    it('renders status-badge with data-status=rejected and strikethrough style', () => {
+      // To see the rejected badge we must first reveal rejected candidates.
+      render(
+        <Scorecard tierId={TIER_1} candidates={[makeCandidate({ status: 'rejected' })]} />,
+      );
+      // The rejected candidate is hidden by default — reveal it first.
+      fireEvent.click(screen.getByTestId('rejected-toggle'));
+      const badge = screen.getByTestId('status-badge');
+      expect(badge).toHaveAttribute('data-status', 'rejected');
+      expect(badge.className).toContain('line-through');
+    });
+  });
+
+  // MFP-17 — rejected-hide toggle
+  describe('rejected-hide toggle', () => {
+    it('hides rejected candidates by default', () => {
+      const candidates = [
+        makeCandidate({ candidate_id: 'a', status: 'under_evaluation' }),
+        makeCandidate({ candidate_id: 'b', status: 'rejected' }),
+      ];
+      render(<Scorecard tierId={TIER_1} candidates={candidates} />);
+      const rows = screen.getAllByTestId('tier-tier_1-candidate');
+      expect(rows).toHaveLength(1);
+      expect(rows[0]!.getAttribute('data-status')).toBe('under_evaluation');
+    });
+
+    it('shows rejected-toggle when rejected candidates exist', () => {
+      const candidates = [
+        makeCandidate({ candidate_id: 'a', status: 'under_evaluation' }),
+        makeCandidate({ candidate_id: 'b', status: 'rejected' }),
+      ];
+      render(<Scorecard tierId={TIER_1} candidates={candidates} />);
+      expect(screen.getByTestId('rejected-toggle')).toBeInTheDocument();
+    });
+
+    it('does NOT show rejected-toggle when no rejected candidates exist', () => {
+      render(
+        <Scorecard tierId={TIER_1} candidates={[makeCandidate({ status: 'under_evaluation' })]} />,
+      );
+      expect(screen.queryByTestId('rejected-toggle')).not.toBeInTheDocument();
+    });
+
+    it('reveals rejected candidates after clicking the toggle', () => {
+      const candidates = [
+        makeCandidate({ candidate_id: 'a', status: 'under_evaluation' }),
+        makeCandidate({ candidate_id: 'b', status: 'rejected' }),
+      ];
+      render(<Scorecard tierId={TIER_1} candidates={candidates} />);
+      fireEvent.click(screen.getByTestId('rejected-toggle'));
+      const rows = screen.getAllByTestId('tier-tier_1-candidate');
+      expect(rows).toHaveLength(2);
+    });
+
+    it('hides rejected candidates again on second toggle click', () => {
+      const candidates = [
+        makeCandidate({ candidate_id: 'a', status: 'under_evaluation' }),
+        makeCandidate({ candidate_id: 'b', status: 'rejected' }),
+      ];
+      render(<Scorecard tierId={TIER_1} candidates={candidates} />);
+      fireEvent.click(screen.getByTestId('rejected-toggle'));
+      fireEvent.click(screen.getByTestId('rejected-toggle'));
+      const rows = screen.getAllByTestId('tier-tier_1-candidate');
+      expect(rows).toHaveLength(1);
+    });
+
+    it('rejected row shown when visible has opacity-50 class', () => {
+      const candidates = [
+        makeCandidate({ candidate_id: 'a', status: 'under_evaluation' }),
+        makeCandidate({ candidate_id: 'b', status: 'rejected' }),
+      ];
+      render(<Scorecard tierId={TIER_1} candidates={candidates} />);
+      fireEvent.click(screen.getByTestId('rejected-toggle'));
+      const rejectedRow = screen
+        .getAllByTestId('tier-tier_1-candidate')
+        .find((r) => r.getAttribute('data-status') === 'rejected');
+      expect(rejectedRow).toBeDefined();
+      expect(rejectedRow!.className).toContain('opacity-50');
+    });
+
+    it('toggle label shows the count of rejected candidates', () => {
+      const candidates = [
+        makeCandidate({ candidate_id: 'a', status: 'under_evaluation' }),
+        makeCandidate({ candidate_id: 'b', status: 'rejected' }),
+        makeCandidate({ candidate_id: 'c', status: 'rejected' }),
+      ];
+      render(<Scorecard tierId={TIER_1} candidates={candidates} />);
+      expect(screen.getByTestId('rejected-toggle').textContent).toContain('2');
+    });
+  });
+
   // MLI-187 — row click opens the candidate-detail drill-down
   describe('drill-down', () => {
     afterEach(() => {

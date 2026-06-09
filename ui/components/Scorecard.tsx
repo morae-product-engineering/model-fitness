@@ -50,11 +50,17 @@ export default function Scorecard({
   apiBaseUrl,
 }: ScorecardProps) {
   const [selected, setSelected] = useState<Candidate | null>(null);
+  const [showRejected, setShowRejected] = useState(false);
   const router = useRouter();
   const drillDownEnabled = Boolean(product && apiBaseUrl);
   if (candidates.length === 0) {
     return null;
   }
+
+  const rejectedCount = candidates.filter((c) => c.status === "rejected").length;
+  const visibleCandidates = showRejected
+    ? candidates
+    : candidates.filter((c) => c.status !== "rejected");
 
   // Derive dimension column headers from the first candidate. The API
   // guarantees all candidates in a tier have the same dimensions.
@@ -81,14 +87,16 @@ export default function Scorecard({
           </tr>
         </thead>
         <tbody>
-          {candidates.map((c, i) => {
+          {visibleCandidates.map((c, i) => {
             const sparkData = sparkSeriesFor(c.candidate_id, trends);
             const sparkStroke =
               c.family === "reasoning" ? "var(--orange)" : "var(--neutral-5)";
+            const isRejected = c.status === "rejected";
             return (
               <tr
                 key={c.candidate_id}
                 data-testid={`tier-${tierId}-candidate`}
+                data-status={c.status}
                 role={drillDownEnabled ? "button" : undefined}
                 tabIndex={drillDownEnabled ? 0 : undefined}
                 onClick={
@@ -105,6 +113,8 @@ export default function Scorecard({
                     : undefined
                 }
                 className={`border-b border-neutral-11 last:border-0 ${
+                  isRejected ? "opacity-50" : ""
+                } ${
                   drillDownEnabled
                     ? "cursor-pointer hover:bg-neutral-13 focus:bg-neutral-13 focus:outline-none"
                     : ""
@@ -173,6 +183,20 @@ export default function Scorecard({
           })}
         </tbody>
       </table>
+      {rejectedCount > 0 && (
+        <div className="px-3 py-2 border-t border-neutral-11">
+          <button
+            type="button"
+            data-testid="rejected-toggle"
+            onClick={() => setShowRejected((v) => !v)}
+            className="text-xs text-neutral-6 hover:text-neutral-3 underline"
+          >
+            {showRejected
+              ? `Hide ${rejectedCount} rejected`
+              : `Show ${rejectedCount} rejected`}
+          </button>
+        </div>
+      )}
       {selected && product && apiBaseUrl && (
         <CandidateDetail
           product={product}
@@ -224,22 +248,24 @@ function VendorBadge({ candidateId }: { candidateId: string }) {
   );
 }
 
-// Status pill colours are limited to what the neutral+orange palette provides.
-// No new colours introduced.
+// Status pill — gold for primary, silver for fallback, struck for rejected.
+// Uses existing palette tokens only (yellow, neutral-4, neutral-12).
 function StatusPill({ status }: { status: Candidate["status"] }) {
   const label = STATUS_LABELS[status];
 
   const cls =
     status === "approved_primary"
-      ? "bg-neutral-1 text-white"
+      ? "bg-yellow text-neutral-1"
       : status === "approved_fallback"
-        ? "bg-neutral-3 text-white"
+        ? "bg-neutral-4 text-white"
         : status === "rejected"
           ? "bg-neutral-12 text-neutral-5 line-through"
           : "bg-neutral-12 text-neutral-5";
 
   return (
     <span
+      data-testid="status-badge"
+      data-status={status}
       className={`inline-block text-xs font-medium rounded px-1.5 py-0.5 whitespace-nowrap ${cls}`}
     >
       {label}
