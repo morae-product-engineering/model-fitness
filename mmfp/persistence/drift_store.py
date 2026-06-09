@@ -89,6 +89,40 @@ class DriftSignalStore:
             ).fetchall()
         return [DriftSignal.model_validate_json(row[0]) for row in rows]
 
+    def list_active_for_product(
+        self,
+        *,
+        product_id: str,
+        candidate_id: str | None = None,
+    ) -> list[tuple[str, DriftSignal]]:
+        """Active signals for a product, paired with their store IDs, newest first.
+
+        Returns ``(signal_id, DriftSignal)`` pairs so callers can acknowledge
+        by ID. Returns an empty list when no active signals exist — not an error.
+        Optional ``candidate_id`` narrows to a single candidate.
+        """
+        self._ensure_schema()
+        with self._connect() as conn:
+            if candidate_id is not None:
+                rows = conn.execute(
+                    """
+                    SELECT id, payload_json FROM drift_signals
+                    WHERE product_id = ? AND candidate_id = ? AND status = 'active'
+                    ORDER BY detected_at DESC, created_at DESC
+                    """,
+                    (product_id, candidate_id),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    """
+                    SELECT id, payload_json FROM drift_signals
+                    WHERE product_id = ? AND status = 'active'
+                    ORDER BY detected_at DESC, created_at DESC
+                    """,
+                    (product_id,),
+                ).fetchall()
+        return [(row[0], DriftSignal.model_validate_json(row[1])) for row in rows]
+
     def acknowledge(self, signal_id: str) -> None:
         """Mark a signal as acknowledged; it will no longer appear in list_active.
 
