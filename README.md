@@ -31,3 +31,20 @@ pytest
 ```
 
 **Running Playwright locally.** Tests against the deployed dev environment require basic-auth credentials. Export `MMFP_BASIC_AUTH_USER` and `MMFP_BASIC_AUTH_PASS` from 1Password ("MMFP / dev UI basic auth") before running `npx playwright test`. These will be removed when Entra SSO replaces basic auth.
+
+# Installing Claude CLI
+
+`curl -fsSL https://claude.ai/install.sh | bash`
+// update path if necessary
+
+Choosing a different model
+
+```
+For Sonnet 4.5: claude --model claude-sonnet-4-5-20250929
+For Haiku 4.5: claude --model claude-haiku-4-5-20251001
+For Opus 4.5: claude --model claude-opus-4-5-20251101
+For Opus 4.6: claude --model claude-opus-4-6
+For Sonnet 4.6: claude --model claude-sonnet-4-6
+For Opus 4.7: claude --model claude-opus-4-7
+For Opus 4.8: claude --model claude-opus-4-8
+```
