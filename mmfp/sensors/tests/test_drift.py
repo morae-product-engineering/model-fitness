@@ -254,8 +254,10 @@ def test_aggregate_across_multiple_samples():
     )
     # Two samples averaging to 55 → delta = -25 → high
     live = [
-        {"candidate_id": "cand-a", "tier_id": "tier_1", "dimension_id": "dim_a", "normalized_score": "50"},
-        {"candidate_id": "cand-a", "tier_id": "tier_1", "dimension_id": "dim_a", "normalized_score": "60"},
+        {"candidate_id": "cand-a", "tier_id": "tier_1", "dimension_id": "dim_a",
+         "normalized_score": "50"},
+        {"candidate_id": "cand-a", "tier_id": "tier_1", "dimension_id": "dim_a",
+         "normalized_score": "60"},
     ]
     signal = sensor.detect("cand-a", "tier_1", baseline, live)
     assert signal is not None

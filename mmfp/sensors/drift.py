@@ -113,7 +113,10 @@ class DriftSensor(SensorPlugin):
 
         scores: list[Decimal] = []
         for s in live_sample:
-            raw = s.get("normalized_score") if isinstance(s, dict) else getattr(s, "normalized_score", None)
+            raw = (
+                s.get("normalized_score") if isinstance(s, dict)
+                else getattr(s, "normalized_score", None)
+            )
             if raw is None:
                 continue
             try:
