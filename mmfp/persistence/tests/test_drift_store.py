@@ -16,7 +16,6 @@ import pytest
 from mmfp.models.drift import DriftSignal
 from mmfp.persistence.drift_store import DriftSignalStore
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
