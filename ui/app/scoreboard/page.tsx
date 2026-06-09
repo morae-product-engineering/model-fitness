@@ -13,6 +13,7 @@ import {
 import { resolveEnvLabel } from "@/lib/env";
 import { readRole } from "@/lib/roles";
 import TierCard from "@/components/TierCard";
+import HistoryPanel from "@/components/HistoryPanel";
 import AppShell from "@/components/AppShell";
 import Link from "next/link";
 
@@ -205,6 +206,7 @@ export default async function ScoreboardPage({ searchParams }: PageProps) {
                 apiBaseUrl={clientApiBaseUrl}
               />
             ))}
+            <HistoryPanel product={product} apiBaseUrl={clientApiBaseUrl} />
           </div>
         </div>
       </div>
