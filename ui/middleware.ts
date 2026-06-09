@@ -16,17 +16,40 @@ import { NextResponse, type NextRequest } from "next/server";
 const REALM = "MMFP dev";
 const HEALTH_PATHS = new Set(["/health", "/healthz", "/_health"]);
 
-type Decision = { kind: "pass" } | { kind: "reject" };
+type Role = "steward" | "viewer";
+type Decision = { kind: "pass"; role: Role } | { kind: "reject" };
+
+type CredConfig = { user: string; pass: string; role: Role };
+
+// Build the ordered list of valid credential pairs from env.
+// Checked in order: steward pair, viewer pair, legacy BASIC_AUTH alias (steward).
+// An empty list means no credentials are configured → fail closed.
+function buildCredentials(env: Record<string, string | undefined>): CredConfig[] {
+  const creds: CredConfig[] = [];
+  const stewardUser = env.STEWARD_USER ?? "";
+  const stewardPass = env.STEWARD_PASS ?? "";
+  if (stewardUser && stewardPass) creds.push({ user: stewardUser, pass: stewardPass, role: "steward" });
+
+  const viewerUser = env.VIEWER_USER ?? "";
+  const viewerPass = env.VIEWER_PASS ?? "";
+  if (viewerUser && viewerPass) creds.push({ user: viewerUser, pass: viewerPass, role: "viewer" });
+
+  // Legacy alias: BASIC_AUTH_USER/PASS maps to steward role.
+  const legacyUser = env.BASIC_AUTH_USER ?? "";
+  const legacyPass = env.BASIC_AUTH_PASS ?? "";
+  if (legacyUser && legacyPass) creds.push({ user: legacyUser, pass: legacyPass, role: "steward" });
+
+  return creds;
+}
 
 // Pure decision so unit tests don't need NextRequest/NextResponse.
-// Fails closed: missing config = reject every request.
+// Fails closed: no recognised credential pair in env = reject every request.
 export function decideAuth(
   authHeader: string | null | undefined,
   env: Record<string, string | undefined>,
 ): Decision {
-  const user = env.BASIC_AUTH_USER ?? "";
-  const pass = env.BASIC_AUTH_PASS ?? "";
-  if (!user || !pass) return { kind: "reject" };
+  const credentials = buildCredentials(env);
+  if (credentials.length === 0) return { kind: "reject" };
 
   if (!authHeader || !authHeader.startsWith("Basic ")) {
     return { kind: "reject" };
@@ -43,9 +66,13 @@ export function decideAuth(
   if (sep < 0) return { kind: "reject" };
   const givenUser = decoded.slice(0, sep);
   const givenPass = decoded.slice(sep + 1);
-  return givenUser === user && givenPass === pass
-    ? { kind: "pass" }
-    : { kind: "reject" };
+
+  for (const cred of credentials) {
+    if (givenUser === cred.user && givenPass === cred.pass) {
+      return { kind: "pass", role: cred.role };
+    }
+  }
+  return { kind: "reject" };
 }
 
 export function middleware(req: NextRequest): NextResponse {
