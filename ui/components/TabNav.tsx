@@ -1,7 +1,5 @@
 // lifted from ui/prototype/shell.jsx:105 (TabNav)
-// All four prototype tabs render so the planned product shape is visible.
-// Scoreboard, Editor, and Curator have routes; History remains disabled with
-// a tooltip until its route ships in a later slice.
+// All four tabs are now navigable: Scoreboard, Editor, Curator, and History.
 
 import Link from "next/link";
 

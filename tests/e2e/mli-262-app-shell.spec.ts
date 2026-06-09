@@ -22,17 +22,11 @@ test('scoreboard renders the app-shell chrome with Scoreboard active', async ({ 
   await expect(page.getByTestId('app-shell-tabs')).toBeVisible();
   await expect(page.getByTestId('tab-scoreboard')).toHaveAttribute('data-active', 'true');
 
-  // Editor (MLI-195) and Curator (MLI-196) are navigable — not disabled.
-  for (const tab of ['editor', 'curator']) {
+  // Editor (MLI-195), Curator (MLI-196), and History are all navigable.
+  for (const tab of ['editor', 'curator', 'history']) {
     const el = page.getByTestId(`tab-${tab}`);
     await expect(el).toBeVisible();
     await expect(el).toHaveAttribute('data-active', 'false');
     await expect(el).not.toHaveAttribute('data-disabled', 'true');
   }
-
-  // History remains disabled until its route ships in a later slice.
-  const history = page.getByTestId('tab-history');
-  await expect(history).toBeVisible();
-  await expect(history).toHaveAttribute('data-active', 'false');
-  await expect(history).toHaveAttribute('data-disabled', 'true');
 });
