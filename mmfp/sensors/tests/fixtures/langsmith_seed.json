@@ -1,0 +1,180 @@
+[
+  {
+    "_seed_note": "R1 seed — mirrors what LangSmith returns for GET /api/v1/runs?session=mmfp-drift-seed. Upload these runs to a LangSmith project to reproduce the seeded environment. Runs for kimi-k2-6/tier_1 score ~55, representing a ~30-point regression from an 85-point baseline (the MFP-92 acceptance scenario).",
+    "id": "ls-run-001",
+    "name": "score_classification_accuracy",
+    "run_type": "chain",
+    "start_time": "2026-06-05T10:00:00+00:00",
+    "end_time": "2026-06-05T10:00:01+00:00",
+    "inputs": {
+      "prompt": "Classify the following legal document excerpt into one of: NDA, MSA, SOW, Employment.",
+      "candidate_id": "kimi-k2-6",
+      "tier_id": "tier_1",
+      "dimension_id": "classification_accuracy"
+    },
+    "outputs": {
+      "normalized_score": 56.5
+    },
+    "extra": {
+      "metadata": {
+        "candidate_id": "kimi-k2-6",
+        "tier_id": "tier_1",
+        "dimension_id": "classification_accuracy",
+        "product_id": "contract-triage"
+      }
+    },
+    "tags": ["candidate_id:kimi-k2-6", "tier_id:tier_1"]
+  },
+  {
+    "id": "ls-run-002",
+    "name": "score_extraction_completeness",
+    "run_type": "chain",
+    "start_time": "2026-06-05T11:00:00+00:00",
+    "end_time": "2026-06-05T11:00:02+00:00",
+    "inputs": {
+      "prompt": "Extract all party names and effective dates from the following agreement.",
+      "candidate_id": "kimi-k2-6",
+      "tier_id": "tier_1",
+      "dimension_id": "extraction_completeness"
+    },
+    "outputs": {
+      "normalized_score": 54.0
+    },
+    "extra": {
+      "metadata": {
+        "candidate_id": "kimi-k2-6",
+        "tier_id": "tier_1",
+        "dimension_id": "extraction_completeness",
+        "product_id": "contract-triage"
+      }
+    },
+    "tags": ["candidate_id:kimi-k2-6", "tier_id:tier_1"]
+  },
+  {
+    "id": "ls-run-003",
+    "name": "score_classification_accuracy",
+    "run_type": "chain",
+    "start_time": "2026-06-06T09:30:00+00:00",
+    "end_time": "2026-06-06T09:30:01+00:00",
+    "inputs": {
+      "prompt": "Classify the following legal document excerpt into one of: NDA, MSA, SOW, Employment.",
+      "candidate_id": "kimi-k2-6",
+      "tier_id": "tier_1",
+      "dimension_id": "classification_accuracy"
+    },
+    "outputs": {
+      "normalized_score": 58.0
+    },
+    "extra": {
+      "metadata": {
+        "candidate_id": "kimi-k2-6",
+        "tier_id": "tier_1",
+        "dimension_id": "classification_accuracy",
+        "product_id": "contract-triage"
+      }
+    },
+    "tags": ["candidate_id:kimi-k2-6", "tier_id:tier_1"]
+  },
+  {
+    "id": "ls-run-004",
+    "name": "score_extraction_completeness",
+    "run_type": "chain",
+    "start_time": "2026-06-07T14:00:00+00:00",
+    "end_time": "2026-06-07T14:00:03+00:00",
+    "inputs": {
+      "prompt": "Extract all party names and effective dates from the following agreement.",
+      "candidate_id": "kimi-k2-6",
+      "tier_id": "tier_1",
+      "dimension_id": "extraction_completeness"
+    },
+    "outputs": {
+      "normalized_score": 52.5
+    },
+    "extra": {
+      "metadata": {
+        "candidate_id": "kimi-k2-6",
+        "tier_id": "tier_1",
+        "dimension_id": "extraction_completeness",
+        "product_id": "contract-triage"
+      }
+    },
+    "tags": ["candidate_id:kimi-k2-6", "tier_id:tier_1"]
+  },
+  {
+    "id": "ls-run-005",
+    "name": "score_classification_accuracy",
+    "run_type": "chain",
+    "start_time": "2026-06-08T08:15:00+00:00",
+    "end_time": "2026-06-08T08:15:01+00:00",
+    "inputs": {
+      "prompt": "Classify the following legal document excerpt into one of: NDA, MSA, SOW, Employment.",
+      "candidate_id": "kimi-k2-6",
+      "tier_id": "tier_1",
+      "dimension_id": "classification_accuracy"
+    },
+    "outputs": {
+      "normalized_score": 55.0
+    },
+    "extra": {
+      "metadata": {
+        "candidate_id": "kimi-k2-6",
+        "tier_id": "tier_1",
+        "dimension_id": "classification_accuracy",
+        "product_id": "contract-triage"
+      }
+    },
+    "tags": ["candidate_id:kimi-k2-6", "tier_id:tier_1"]
+  },
+  {
+    "_seed_note": "Different candidate — should be filtered out when fetching for kimi-k2-6.",
+    "id": "ls-run-006",
+    "name": "score_classification_accuracy",
+    "run_type": "chain",
+    "start_time": "2026-06-05T10:30:00+00:00",
+    "end_time": "2026-06-05T10:30:01+00:00",
+    "inputs": {
+      "prompt": "Classify the following legal document excerpt.",
+      "candidate_id": "gpt-4o",
+      "tier_id": "tier_1",
+      "dimension_id": "classification_accuracy"
+    },
+    "outputs": {
+      "normalized_score": 82.0
+    },
+    "extra": {
+      "metadata": {
+        "candidate_id": "gpt-4o",
+        "tier_id": "tier_1",
+        "dimension_id": "classification_accuracy",
+        "product_id": "contract-triage"
+      }
+    },
+    "tags": ["candidate_id:gpt-4o", "tier_id:tier_1"]
+  },
+  {
+    "_seed_note": "Same candidate, different tier — should be filtered out when fetching for tier_1.",
+    "id": "ls-run-007",
+    "name": "score_classification_accuracy",
+    "run_type": "chain",
+    "start_time": "2026-06-06T10:00:00+00:00",
+    "end_time": "2026-06-06T10:00:01+00:00",
+    "inputs": {
+      "prompt": "Classify the following legal document excerpt.",
+      "candidate_id": "kimi-k2-6",
+      "tier_id": "tier_2",
+      "dimension_id": "classification_accuracy"
+    },
+    "outputs": {
+      "normalized_score": 70.0
+    },
+    "extra": {
+      "metadata": {
+        "candidate_id": "kimi-k2-6",
+        "tier_id": "tier_2",
+        "dimension_id": "classification_accuracy",
+        "product_id": "contract-triage"
+      }
+    },
+    "tags": ["candidate_id:kimi-k2-6", "tier_id:tier_2"]
+  }
+]
