@@ -2,6 +2,7 @@
 // All four tabs are now navigable: Scoreboard, Editor, Curator, and History.
 
 import Link from "next/link";
+import type { Role } from "@/lib/roles";
 
 export type TabId = "scoreboard" | "editor" | "curator" | "history";
 
@@ -18,11 +19,17 @@ const TABS: TabSpec[] = [
   { id: "history", label: "History", href: "/history?product=mli" },
 ];
 
+const STEWARD_ONLY = new Set<TabId>(["editor", "curator"]);
+
 interface TabNavProps {
   activeTab: TabId;
+  role?: Role;
 }
 
-export default function TabNav({ activeTab }: TabNavProps) {
+export default function TabNav({ activeTab, role }: TabNavProps) {
+  const visibleTabs =
+    role === "viewer" ? TABS.filter((tab) => !STEWARD_ONLY.has(tab.id)) : TABS;
+
   return (
     <nav
       data-testid="app-shell-tabs"
@@ -38,7 +45,7 @@ export default function TabNav({ activeTab }: TabNavProps) {
         flexShrink: 0,
       }}
     >
-      {TABS.map((tab) => {
+      {visibleTabs.map((tab) => {
         const isActive = tab.id === activeTab;
         const enabled = Boolean(tab.href);
 

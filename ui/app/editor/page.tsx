@@ -1,7 +1,9 @@
 // Async server component — fetches the live rubric and renders the Editor.
 // ASSUMES: NEXT_PUBLIC_API_URL is set; falls back to localhost:8000 for local dev.
 
+import { redirect } from "next/navigation";
 import { resolveEnvLabel } from "@/lib/env";
+import { readRole } from "@/lib/roles";
 import type { RubricReadResponse } from "@/lib/rubric";
 import AppShell from "@/components/AppShell";
 import RubricEditor from "@/components/RubricEditor";
@@ -16,6 +18,9 @@ interface PageProps {
 
 export default async function EditorPage({ searchParams }: PageProps) {
   const product = searchParams.product ?? "mli";
+  const role = readRole();
+  if (role === "viewer") redirect(`/scoreboard?product=${product}`);
+
   const env = resolveEnvLabel();
   const productMeta = { id: product, name: product.toUpperCase() };
   const base = apiBaseUrl();

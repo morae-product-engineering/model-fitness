@@ -3,7 +3,9 @@
 // Slice 6 will replace this with real content from ui/prototype/curator.jsx —
 // that prototype is deliberately NOT lifted here (out of scope for MLI-196).
 
+import { redirect } from "next/navigation";
 import { resolveEnvLabel } from "@/lib/env";
+import { readRole } from "@/lib/roles";
 import AppShell from "@/components/AppShell";
 
 interface PageProps {
@@ -12,6 +14,9 @@ interface PageProps {
 
 export default function CuratorPage({ searchParams }: PageProps) {
   const product = searchParams.product ?? "mli";
+  const role = readRole();
+  if (role === "viewer") redirect(`/scoreboard?product=${product}`);
+
   const env = resolveEnvLabel();
   const productMeta = { id: product, name: product.toUpperCase() };
 
