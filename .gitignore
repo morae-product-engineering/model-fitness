@@ -50,3 +50,5 @@ docs/architecture/workspace.json
 *.p12
 # VSCode personal overrides
 .vscode/settings.local.json
+# Claude Code session-generated settings (auto-written allow entries)
+.claude/settings.json
