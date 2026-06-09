@@ -33,12 +33,20 @@ import {
   CandidateDetail as CandidateDetailType,
   Family,
   RubricDimension,
-  RubricTier,
+  Status,
   TierId,
   WireCandidateDetail,
   parseCandidateDetail,
 } from "@/lib/scoreboard";
+import {
+  AuditEntry,
+  DecisionKind,
+  PendingDecision,
+  fetchAuditLog,
+} from "@/lib/promotion";
 import { inferVendor } from "@/lib/vendor";
+import DecisionModal from "./DecisionModal";
+import Btn from "./primitives/Btn";
 import Spark from "./primitives/Spark";
 
 interface CandidateDetailProps {
@@ -54,6 +62,8 @@ interface CandidateDetailProps {
   tierId: TierId;
   apiBaseUrl: string;
   onClose: () => void;
+  // Called after a decision is committed so the parent can refresh scoreboard data.
+  onStatusChange?: () => void;
 }
 
 type FetchState =
@@ -70,8 +80,13 @@ export default function CandidateDetail({
   tierId,
   apiBaseUrl,
   onClose,
+  onStatusChange,
 }: CandidateDetailProps) {
   const [state, setState] = useState<FetchState>({ kind: "loading" });
+  const [auditEntries, setAuditEntries] = useState<AuditEntry[]>([]);
+  const [pendingDecision, setPendingDecision] = useState<PendingDecision | null>(null);
+  // Incrementing this triggers a re-fetch of both detail and audit log after a decision.
+  const [refreshKey, setRefreshKey] = useState(0);
   const panelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -107,7 +122,11 @@ export default function CandidateDetail({
     return () => {
       cancelled = true;
     };
-  }, [product, deployment, apiBaseUrl]);
+  }, [product, deployment, apiBaseUrl, refreshKey]);
+
+  useEffect(() => {
+    fetchAuditLog(apiBaseUrl, product, deployment).then(setAuditEntries);
+  }, [apiBaseUrl, product, deployment, refreshKey]);
 
   // Escape key dismisses; focus the panel on open so the key handler binds.
   useEffect(() => {
@@ -118,6 +137,15 @@ export default function CandidateDetail({
     panelRef.current?.focus();
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
+
+  function handleDecision(kind: DecisionKind) {
+    setPendingDecision({ kind, displayName, deployment, tierId });
+  }
+
+  function handleDecisionSuccess() {
+    setRefreshKey((k) => k + 1);
+    onStatusChange?.();
+  }
 
   return (
     <div
@@ -149,10 +177,25 @@ export default function CandidateDetail({
           {state.kind === "loading" && <LoadingBody />}
           {state.kind === "error" && <ErrorBody message={state.message} />}
           {state.kind === "loaded" && (
-            <LoadedBody detail={state.detail} tierId={tierId} />
+            <LoadedBody
+              detail={state.detail}
+              tierId={tierId}
+              auditEntries={auditEntries}
+              onDecision={handleDecision}
+            />
           )}
         </div>
       </div>
+
+      {pendingDecision && (
+        <DecisionModal
+          action={pendingDecision}
+          product={product}
+          apiBaseUrl={apiBaseUrl}
+          onClose={() => setPendingDecision(null)}
+          onSuccess={handleDecisionSuccess}
+        />
+      )}
     </div>
   );
 }
@@ -232,9 +275,13 @@ function ErrorBody({ message }: { message: string }) {
 function LoadedBody({
   detail,
   tierId,
+  auditEntries,
+  onDecision,
 }: {
   detail: CandidateDetailType;
   tierId: TierId;
+  auditEntries: AuditEntry[];
+  onDecision: (kind: DecisionKind) => void;
 }) {
   const rubricTier = useMemo(
     () => detail.rubric.tiers.find((t) => t.tier_id === tierId) ?? null,
@@ -326,6 +373,13 @@ function LoadedBody({
             : "—"}
         </span>
       </div>
+
+      <DecisionButtons
+        status={detail.status}
+        onDecision={onDecision}
+      />
+
+      <AuditHistory entries={auditEntries} />
     </>
   );
 }
@@ -433,6 +487,135 @@ function DimensionRow({
       <span className={`font-mono text-right ${valueTone}`}>
         {contribution !== null ? contribution.toFixed(1) : "—"}
       </span>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Decision buttons — shown in the loaded state. Which buttons render depends
+// on current status; rejected candidates have no available actions (no reinstate
+// endpoint exists yet).
+// ---------------------------------------------------------------------------
+
+const ACTION_LABELS: Record<string, string> = {
+  promote_primary: "Promoted to Primary",
+  promote_fallback: "Set as Fallback",
+  reject: "Rejected",
+  revert: "Reverted",
+};
+
+function DecisionButtons({
+  status,
+  onDecision,
+}: {
+  status: Status;
+  onDecision: (kind: DecisionKind) => void;
+}) {
+  if (status === "rejected") {
+    return (
+      <div className="mt-5 pt-4 border-t border-neutral-12">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-neutral-6 mb-2">
+          Decisions
+        </p>
+        <p className="text-xs text-neutral-6 italic">
+          Candidate is rejected — no actions available.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      data-testid="decision-buttons"
+      className="mt-5 pt-4 border-t border-neutral-12"
+    >
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-neutral-6 mb-2">
+        Decisions
+      </p>
+      <div className="flex flex-col gap-1.5">
+        {status !== "approved_primary" && (
+          <Btn
+            variant="default"
+            size="sm"
+            data-testid="btn-promote-primary"
+            onClick={() => onDecision("promote_primary")}
+          >
+            Promote to Primary
+          </Btn>
+        )}
+        {status !== "approved_fallback" && (
+          <Btn
+            variant="outline"
+            size="sm"
+            data-testid="btn-promote-fallback"
+            onClick={() => onDecision("promote_fallback")}
+          >
+            Set as Fallback
+          </Btn>
+        )}
+        <Btn
+          variant="ghost"
+          size="sm"
+          data-testid="btn-reject"
+          style={{ color: "var(--warm-red)" }}
+          onClick={() => onDecision("reject")}
+        >
+          Reject
+        </Btn>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Audit history — shows the last 10 decisions for this candidate in the
+// drawer. Empty when no decisions have been made yet.
+// ---------------------------------------------------------------------------
+
+function AuditHistory({ entries }: { entries: AuditEntry[] }) {
+  if (entries.length === 0) return null;
+
+  return (
+    <div
+      data-testid="audit-history"
+      className="mt-5 pt-4 border-t border-neutral-12"
+    >
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-neutral-6 mb-2">
+        Decision history
+      </p>
+      <div className="flex flex-col gap-2">
+        {entries.map((e) => (
+          <AuditEntryRow key={e.id} entry={e} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function AuditEntryRow({ entry }: { entry: AuditEntry }) {
+  const label = ACTION_LABELS[entry.action] ?? entry.action;
+  const isReject = entry.action === "reject";
+  const pillCls = isReject
+    ? "bg-light-red text-warm-red"
+    : "bg-light-green text-green";
+
+  const d = new Date(entry.timestamp);
+  const dateLabel = Number.isNaN(d.getTime())
+    ? entry.timestamp
+    : d.toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" });
+
+  return (
+    <div className="text-xs border border-neutral-12 rounded-md p-2.5">
+      <div className="flex items-center gap-2 mb-1">
+        <span
+          className={`inline-block text-[10px] font-semibold rounded px-1.5 py-0.5 ${pillCls}`}
+        >
+          {label}
+        </span>
+        <span className="font-mono text-neutral-6 text-[10px]">{dateLabel}</span>
+      </div>
+      <p className="text-neutral-3 leading-snug">"{entry.rationale}"</p>
+      <p className="text-neutral-6 mt-1 font-mono text-[10px]">{entry.actor}</p>
     </div>
   );
 }
