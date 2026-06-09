@@ -85,6 +85,7 @@ export default function CandidateDetail({
   const [state, setState] = useState<FetchState>({ kind: "loading" });
   const [auditEntries, setAuditEntries] = useState<AuditEntry[]>([]);
   const [pendingDecision, setPendingDecision] = useState<PendingDecision | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
   // Incrementing this triggers a re-fetch of both detail and audit log after a decision.
   const [refreshKey, setRefreshKey] = useState(0);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -127,6 +128,13 @@ export default function CandidateDetail({
   useEffect(() => {
     fetchAuditLog(apiBaseUrl, product, deployment).then(setAuditEntries);
   }, [apiBaseUrl, product, deployment, refreshKey]);
+
+  // Auto-dismiss toast after 3 s — same pattern as RubricEditor.
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 3000);
+    return () => clearTimeout(t);
+  }, [toast]);
 
   // Escape key dismisses; focus the panel on open so the key handler binds.
   useEffect(() => {
@@ -194,7 +202,31 @@ export default function CandidateDetail({
           apiBaseUrl={apiBaseUrl}
           onClose={() => setPendingDecision(null)}
           onSuccess={handleDecisionSuccess}
+          onToast={setToast}
         />
+      )}
+
+      {toast && (
+        <div
+          data-testid="toast"
+          style={{
+            position: "fixed",
+            bottom: 24,
+            left: "50%",
+            transform: "translateX(-50%)",
+            background: "var(--neutral-1)",
+            color: "#fff",
+            padding: "10px 18px",
+            borderRadius: 8,
+            fontSize: 13,
+            fontWeight: 500,
+            zIndex: 200,
+            boxShadow: "var(--shadow-md)",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {toast}
+        </div>
       )}
     </div>
   );
@@ -376,6 +408,7 @@ function LoadedBody({
 
       <DecisionButtons
         status={detail.status}
+        score={tierResult?.weighted_score}
         onDecision={onDecision}
       />
 
@@ -498,19 +531,24 @@ function DimensionRow({
 // ---------------------------------------------------------------------------
 
 const ACTION_LABELS: Record<string, string> = {
-  promote_primary: "Promoted to Primary",
-  promote_fallback: "Set as Fallback",
-  reject: "Rejected",
-  revert: "Reverted",
+  promote_primary: "promoted to primary",
+  promote_fallback: "set as fallback",
+  reject: "rejected",
+  revert: "reverted",
 };
 
 function DecisionButtons({
   status,
+  score,
+  primaryThreshold = 75,
   onDecision,
 }: {
   status: Status;
+  score?: number;
+  primaryThreshold?: number;
   onDecision: (kind: DecisionKind) => void;
 }) {
+  const belowPrimary = score !== undefined && score < primaryThreshold;
   if (status === "rejected") {
     return (
       <div className="mt-5 pt-4 border-t border-neutral-12">
@@ -534,14 +572,21 @@ function DecisionButtons({
       </p>
       <div className="flex flex-col gap-1.5">
         {status !== "approved_primary" && (
-          <Btn
-            variant="default"
-            size="sm"
-            data-testid="btn-promote-primary"
-            onClick={() => onDecision("promote_primary")}
-          >
-            Promote to Primary
-          </Btn>
+          belowPrimary ? (
+            <p className="text-[11px] text-neutral-6 italic">
+              Score below primary threshold ({primaryThreshold}) — not eligible
+              for primary promotion.
+            </p>
+          ) : (
+            <Btn
+              variant="default"
+              size="sm"
+              data-testid="action-promote-primary"
+              onClick={() => onDecision("promote_primary")}
+            >
+              Promote to Primary
+            </Btn>
+          )
         )}
         {status !== "approved_fallback" && (
           <Btn
@@ -573,6 +618,7 @@ function DecisionButtons({
 // ---------------------------------------------------------------------------
 
 function AuditHistory({ entries }: { entries: AuditEntry[] }) {
+  const [open, setOpen] = useState(false);
   if (entries.length === 0) return null;
 
   return (
@@ -580,14 +626,26 @@ function AuditHistory({ entries }: { entries: AuditEntry[] }) {
       data-testid="audit-history"
       className="mt-5 pt-4 border-t border-neutral-12"
     >
-      <p className="text-[11px] font-semibold uppercase tracking-wide text-neutral-6 mb-2">
-        Decision history
-      </p>
-      <div className="flex flex-col gap-2">
-        {entries.map((e) => (
-          <AuditEntryRow key={e.id} entry={e} />
-        ))}
+      <div className="flex items-center justify-between mb-2">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-neutral-6">
+          Decision history ({entries.length})
+        </p>
+        <button
+          type="button"
+          data-testid="history-toggle"
+          onClick={() => setOpen((v) => !v)}
+          className="text-[11px] text-neutral-6 hover:text-neutral-3 underline"
+        >
+          {open ? "Hide" : "Show"}
+        </button>
       </div>
+      {open && (
+        <div className="flex flex-col gap-2">
+          {entries.map((e) => (
+            <AuditEntryRow key={e.id} entry={e} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -605,7 +663,7 @@ function AuditEntryRow({ entry }: { entry: AuditEntry }) {
     : d.toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" });
 
   return (
-    <div className="text-xs border border-neutral-12 rounded-md p-2.5">
+    <div data-testid="history-entry" className="text-xs border border-neutral-12 rounded-md p-2.5">
       <div className="flex items-center gap-2 mb-1">
         <span
           className={`inline-block text-[10px] font-semibold rounded px-1.5 py-0.5 ${pillCls}`}

@@ -123,6 +123,7 @@ class DriftSignalStore:
                 ).fetchall()
         return [(row[0], DriftSignal.model_validate_json(row[1])) for row in rows]
 
+
     def acknowledge(self, signal_id: str) -> None:
         """Mark a signal as acknowledged; it will no longer appear in list_active.
 
