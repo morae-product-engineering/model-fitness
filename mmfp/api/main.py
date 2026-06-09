@@ -21,6 +21,8 @@ from pydantic import BaseModel, Field
 
 from mmfp.api import (
     candidate_detail,
+    datasets,
+    judge_queue,
     promotion,
     rubric_preview,
     rubric_read,
@@ -126,3 +128,5 @@ app.include_router(rubric_write.router)
 app.include_router(rubric_preview.router)
 app.include_router(rubric_read.router)
 app.include_router(promotion.router)
+app.include_router(datasets.router)
+app.include_router(judge_queue.router)
