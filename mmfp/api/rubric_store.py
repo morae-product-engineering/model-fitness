@@ -105,6 +105,9 @@ class RubricStore(Protocol):
         """Persist the new rubric + audit record durably. Return an audit ref
         (the audit record's storage name) for the response/logs."""
 
+    def list_audit(self, product: str, *, limit: int = 20) -> list[AuditRecord]:
+        """Return at most ``limit`` audit records, newest-first."""
+
 
 # ---------------------------------------------------------------------------
 # Disk backend (local dev + tests)
@@ -143,6 +146,19 @@ class DiskRubricStore:
         audit_path.parent.mkdir(parents=True, exist_ok=True)
         audit_path.write_text(audit.model_dump_json(indent=2), encoding="utf-8")
         return ref
+
+    def list_audit(self, product: str, *, limit: int = 20) -> list[AuditRecord]:
+        audit_dir = self._products_dir / product / "rubric" / "audit"
+        if not audit_dir.exists():
+            return []
+        paths = sorted(audit_dir.glob("*.json"), reverse=True)
+        records = []
+        for p in paths[:limit]:
+            try:
+                records.append(AuditRecord.model_validate_json(p.read_text(encoding="utf-8")))
+            except Exception:
+                logger.warning("rubric_store.list_audit.skip_malformed", extra={"path": str(p)})
+        return records
 
 
 # ---------------------------------------------------------------------------
@@ -221,6 +237,22 @@ class BlobRubricStore:
             ref, audit.model_dump_json().encode("utf-8"), overwrite=False
         )
         return ref
+
+    def list_audit(self, product: str, *, limit: int = 20) -> list[AuditRecord]:
+        prefix = f"{product}/rubric/audit/"
+        # Blob names are lexicographically chronological; reverse to get newest-first.
+        names = sorted(
+            (b["name"] for b in self._container.list_blobs(name_starts_with=prefix)),
+            reverse=True,
+        )
+        records = []
+        for name in names[:limit]:
+            try:
+                data = self._container.download_blob(name).readall()
+                records.append(AuditRecord.model_validate_json(data))
+            except Exception:
+                logger.warning("rubric_store.list_audit.skip_malformed", extra={"blob": name})
+        return records
 
 
 # ---------------------------------------------------------------------------
