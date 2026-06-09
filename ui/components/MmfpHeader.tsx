@@ -13,6 +13,7 @@ import {
   IconGit,
 } from "./primitives/icons";
 import type { Role } from "@/lib/roles";
+import VersionBadge from "./VersionBadge";
 
 export interface MmfpHeaderProduct {
   id: string;
@@ -70,16 +71,7 @@ export default function MmfpHeader({
           >
             Model Fitness Platform
           </span>
-          <span
-            data-testid="rubric-version"
-            style={{
-              fontSize: 11,
-              color: "var(--neutral-6)",
-              fontFamily: "var(--font-mono)",
-            }}
-          >
-            {rubricVersion}
-          </span>
+          <VersionBadge initialVersion={rubricVersion} />
         </div>
       </div>
 

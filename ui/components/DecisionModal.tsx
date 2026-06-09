@@ -2,7 +2,7 @@
 
 // Rationale-capture dialog for promote / reject decisions (AC1).
 // Rendered on top of the CandidateDetail drawer via z-50; confirm is disabled
-// until the rationale field is non-empty.
+// until the rationale has at least 5 characters.
 
 import { useEffect, useRef, useState } from "react";
 import {
@@ -20,7 +20,14 @@ interface DecisionModalProps {
   apiBaseUrl: string;
   onClose: () => void;
   onSuccess: () => void;
+  onToast: (message: string) => void;
 }
+
+const TOAST_MESSAGES: Record<DecisionKind, string> = {
+  promote_primary: "promoted to primary",
+  promote_fallback: "set as fallback",
+  reject: "candidate rejected",
+};
 
 const TIER_LABELS: Record<TierId, string> = {
   tier_1: "T1 · Classification & Routing",
@@ -50,6 +57,7 @@ export default function DecisionModal({
   apiBaseUrl,
   onClose,
   onSuccess,
+  onToast,
 }: DecisionModalProps) {
   const [rationale, setRationale] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -78,7 +86,7 @@ export default function DecisionModal({
         : `Reject ${action.displayName}`;
 
   async function handleConfirm() {
-    if (!rationale.trim() || submitting) return;
+    if (rationale.trim().length < 5 || submitting) return;
     setSubmitting(true);
     setError(null);
 
@@ -105,6 +113,7 @@ export default function DecisionModal({
       setError(result.error);
       return;
     }
+    onToast(TOAST_MESSAGES[action.kind]);
     onSuccess();
     onClose();
   }
@@ -151,7 +160,7 @@ export default function DecisionModal({
           </label>
           <textarea
             ref={textareaRef}
-            data-testid="decision-rationale"
+            data-testid="promotion-rationale"
             value={rationale}
             onChange={(e) => setRationale(e.target.value)}
             placeholder={PLACEHOLDERS[action.kind]}
@@ -171,10 +180,10 @@ export default function DecisionModal({
             Cancel
           </Btn>
           <Btn
-            data-testid="decision-confirm"
+            data-testid="promotion-submit"
             variant={action.kind === "reject" ? "destructive" : "default"}
             size="sm"
-            disabled={!rationale.trim() || submitting}
+            disabled={rationale.trim().length < 5 || submitting}
             onClick={handleConfirm}
           >
             {submitting

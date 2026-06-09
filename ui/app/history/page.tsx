@@ -2,7 +2,7 @@
 // status changes (AC3 of the production-decision slice).
 // Server component: fetches both event streams at render time, merges them,
 // and passes the sorted result to the pure HistoryFeed renderer.
-// ASSUMES: NEXT_PUBLIC_API_URL is set; falls back to 127.0.0.1:8000 for local dev.
+// ASSUMES: NEXT_PUBLIC_API_URL is set; falls back to localhost:8000 for local dev.
 
 import AppShell from "@/components/AppShell";
 import { resolveEnvLabel } from "@/lib/env";
@@ -10,7 +10,7 @@ import { readRole } from "@/lib/roles";
 import { AuditEntry, RubricAuditRecord } from "@/lib/promotion";
 
 function apiBaseUrl(): string {
-  return process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
+  return process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 }
 
 // ---------------------------------------------------------------------------

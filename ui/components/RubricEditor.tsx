@@ -643,7 +643,10 @@ export default function RubricEditor({
       if (res.status === 200) {
         const data = await res.json();
         const newVersion: string = data.new_version;
-        // Set toast BEFORE router.refresh() so it's immediately visible.
+        // Notify VersionBadge BEFORE setting the toast so both update in the same React render
+        window.dispatchEvent(
+          new CustomEvent("rubric-saved", { detail: { version: newVersion } }),
+        );
         setToast(`Rubric saved · ${newVersion}`);
         setSaveNote("");
         router.refresh();

@@ -43,7 +43,7 @@ A walk of `docs/ui/` and `ui/` end-to-end. Each entry tagged with whether Slice 
 
 ## 2. Deployed state (what's actually on `ca-mmfp-ui-dev` today)
 
-Walkthrough recorded in a real browser (Playwright/Chromium) against a local stack that mirrors deployed (same Container Apps, just running on `127.0.0.1`). Same components, same fetch wiring, same API.
+Walkthrough recorded in a real browser (Playwright/Chromium) against a local stack that mirrors deployed (same Container Apps, just running on `localhost`). Same components, same fetch wiring, same API.
 
 What renders on `/scoreboard?product=mli`:
 

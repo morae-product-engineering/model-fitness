@@ -5,17 +5,20 @@
 // Slice-5 architectural-reality comment. The reconciliation and the deliberate
 // target/selector decisions are recorded in the MLI-200 closing comment.
 //
-// RED until the Slice 5 implementation sub-tasks land. The scoreboard, the
-// `tier-<id>-candidate` row contract (Slice 2, MLI-175), and the
-// candidate-detail overlay opened on row click (Slice 3/4, MLI-187) all exist
-// today. The red driver is that the promotion actions and the audit log do NOT
-// yet exist:
-//   - action-promote-primary / promotion-rationale / promotion-submit
-//   - the "promoted to primary" toast confirmation
-//   - history-toggle / history-entry (the audit-history panel)
-// First failure is the absent `action-promote-primary` action inside the
-// detail overlay — i.e. it reds because "the promotion actions and audit log
-// don't exist yet" (MLI-200 scope), not because of a stale selector.
+// All testids are implemented (MFP-15). Expected to go GREEN against deployed
+// dev once the seeded candidate scores above the primary threshold (75).
+// Implementation locations:
+//   action-promote-primary   DecisionButtons in CandidateDetail.tsx (hidden
+//                            when score < primaryThreshold, default 75)
+//   promotion-rationale      DecisionModal.tsx textarea
+//   promotion-submit         DecisionModal.tsx confirm button (disabled until
+//                            rationale.trim().length >= 5)
+//   toast                    CandidateDetail.tsx fixed-bottom pill, auto-
+//                            dismissed after 3 s; text: "promoted to primary"
+//   history-toggle           AuditHistory in CandidateDetail.tsx — show/hide
+//                            toggle, visible when audit entries > 0
+//   history-entry            AuditEntryRow testid; text includes action label
+//                            "promoted to primary" (lowercase)
 //
 // Target candidate (verified, not assumed). The MLI-199 sketch drilled into a
 // tier_3 candidate scoring >=75. The MLI-200 architectural-reality comment
