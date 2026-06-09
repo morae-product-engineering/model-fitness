@@ -344,11 +344,12 @@ describe("CandidateDetail", () => {
   });
 
   it("URL-encodes the deployment name preserving case (Phi-4-mini-instruct)", async () => {
+    // Two fetches fire: the detail fetch and the audit-log fetch (fetchAuditLog).
     const fetchFn = mockFetchOnce(loadedPayload({ latest_run: null, history: [] }));
     renderDetail({ deployment: "Phi-4-mini-instruct", displayName: "Phi-4 mini" });
-    await waitFor(() => expect(fetchFn).toHaveBeenCalledTimes(1));
-    const url = String(fetchFn.mock.calls[0]![0]);
-    expect(url).toBe(`${API_BASE}/api/products/mli/candidates/Phi-4-mini-instruct`);
+    await waitFor(() => expect(fetchFn).toHaveBeenCalledTimes(2));
+    const detailUrl = String(fetchFn.mock.calls[0]![0]);
+    expect(detailUrl).toBe(`${API_BASE}/api/products/mli/candidates/Phi-4-mini-instruct`);
   });
 
   it("renders the empty-state stamp but keeps the rubric rows when latest_run is null", async () => {

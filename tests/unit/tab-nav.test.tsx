@@ -5,8 +5,7 @@
 //     on every page, confirming the full nav shape is always present.
 //   - Active tab receives data-active="true"; all others data-active="false".
 //   - Navigable tabs carry the expected href link targets.
-//   - Curator is now navigable (no data-disabled); History is still disabled
-//     (data-disabled="true") until its route ships.
+//   - All four tabs are now navigable (no data-disabled); History route shipped.
 
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
@@ -61,15 +60,21 @@ describe("TabNav", () => {
   });
 
   // -------------------------------------------------------------------------
-  // Curator navigable; History still disabled
+  // All tabs navigable — no disabled tabs remain
   // -------------------------------------------------------------------------
 
-  it("curator is navigable (no data-disabled) and history remains disabled", () => {
+  it("all four tabs are navigable (no data-disabled)", () => {
     render(<TabNav activeTab="scoreboard" />);
-    expect(screen.getByTestId("tab-curator")).not.toHaveAttribute(
-      "data-disabled",
-      "true",
+    for (const id of ["editor", "curator", "history"]) {
+      expect(screen.getByTestId(`tab-${id}`)).not.toHaveAttribute("data-disabled", "true");
+    }
+  });
+
+  it("renders correct href on history tab", () => {
+    render(<TabNav activeTab="scoreboard" />);
+    expect(screen.getByTestId("tab-history")).toHaveAttribute(
+      "href",
+      "/history?product=mli",
     );
-    expect(screen.getByTestId("tab-history")).toHaveAttribute("data-disabled", "true");
   });
 });
