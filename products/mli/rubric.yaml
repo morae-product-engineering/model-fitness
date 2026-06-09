@@ -13,7 +13,7 @@
 # Active-weight totals per tier (sum of `weight` over active dimensions):
 #   Tier 1 = 100   (5 active, 0 draft — fully realised in v0.1)
 #   Tier 2 = 80    (5 active, 2 draft — composite + qualitative deferred)
-#   Tier 3 = 20    (2 active, 5 draft — judge + composite deferred)
+#   Tier 3 = 45    (3 active, 4 draft — synthesis_quality activated in MFP-77)
 # The matrix engine normalises weighted scores by the per-tier active total
 # (MLI-269), so Tier 3 still produces 0–100 scores from its sparse active
 # coverage rather than artificially-compressed ones.
@@ -201,11 +201,13 @@ tiers:
       - id: synthesis_quality
         name: Synthesis quality
         description: LLM-judge score on clarity, completeness, structure, audience-appropriateness for LCS users
-        weight: 0
-        status: draft
+        weight: 25
+        status: active
         method: llm_judge
         direction: higher_is_better
         evaluator: llm_judge_synthesis_quality
+        evaluator_config:
+          sample_rate: 1.0
 
       - id: factual_faithfulness
         name: Factual faithfulness to retrieved context
@@ -283,14 +285,15 @@ gates:
     description: Candidate supports structured tool / function calling as a native capability
     applies_to_tiers: [tier_2, tier_3]
 
-# Placeholder until Slice 6 wires the LLM-judge plugin (MLI-219+). The
-# `provider` value is preserved unchanged from the prior rubric — the
-# Anthropic vs Azure AI Foundry decision is out of scope for this slice
-# and tracked separately. KNOWN_GAPS.md tracks the judge-runtime gap.
+# Judge config — wired in MFP-77. Uses gpt-4o on Azure Foundry (same
+# endpoint as the candidate slate). Swap model/deployment here if a
+# different judge is preferred; the CLI factory reads both fields.
 judge:
-  model: claude-sonnet-4-5
-  provider: anthropic
-  version_pin: "2025-10-01"
+  model: gpt-4o
+  provider: azure_foundry
+  deployment: gpt-4o
+  endpoint: https://mmfp-dev-models-resource.cognitiveservices.azure.com
+  version_pin: "2024-12-01-preview"
   calibration_set: products/mli/datasets/judge_calibration.jsonl
   temperature: "0.0"
   human_sample_rate: "0.10"

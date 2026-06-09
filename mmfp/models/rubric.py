@@ -225,6 +225,14 @@ class JudgeConfig(BaseModel):
         le=Decimal("1"),
         description="Re-pin when calibration agreement drops below this value",
     )
+    deployment: str | None = Field(
+        default=None,
+        description="Foundry deployment name for azure_foundry provider",
+    )
+    endpoint: str | None = Field(
+        default=None,
+        description="Foundry endpoint URL for azure_foundry provider",
+    )
 
 
 class PortfolioThresholds(BaseModel):

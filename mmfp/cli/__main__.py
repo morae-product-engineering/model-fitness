@@ -163,7 +163,11 @@ def _run_matrix(
 
     db_path = Path(os.environ.get("MMFP_DB_PATH", _DEFAULT_DB_PATH))
     repository = repository_factory(db_path)
-    engine = engine_factory()
+    judge_ef = _make_judge_evaluator_factory(config.rubric)
+    if judge_ef is not None and engine_factory is MatrixEngine:
+        engine = MatrixEngine(evaluator_factory=judge_ef)
+    else:
+        engine = engine_factory()
 
     logger.info(
         "Starting matrix run",
@@ -195,6 +199,50 @@ def _run_matrix(
     )
     _print_summary(run, product=product, out=stdout)
     return _EXIT_OK
+
+
+def _make_judge_evaluator_factory(rubric):
+    """Return a judge-wired evaluator factory, or None if judge is not configured.
+
+    Returns None when provider is not azure_foundry or deployment/endpoint are
+    absent — the caller falls back to the default registry factory in those cases.
+    """
+    from mmfp.bindings import _registry as binding_registry
+    from mmfp.evaluators import _registry as evaluator_registry
+    from mmfp.evaluators.inferential.llm_judge import LLMJudgeEvaluator
+    from mmfp.models.candidate import Candidate, CandidateBinding, CandidateFamily, CandidateStatus
+
+    judge_cfg = getattr(rubric, "judge", None)
+    if judge_cfg is None or judge_cfg.provider != "azure_foundry":
+        return None
+    if not judge_cfg.deployment or not judge_cfg.endpoint:
+        return None
+
+    judge_binding = binding_registry.get("azure_foundry")()
+    judge_candidate = Candidate(
+        id="__judge__",
+        display_name="Judge (gpt-4o)",
+        family=CandidateFamily.CHAT,
+        max_tokens=1024,
+        context_window=128000,
+        tiers=["tier_3"],
+        status=CandidateStatus.UNDER_EVALUATION,
+        binding=CandidateBinding(
+            provider="azure_foundry",
+            endpoint=judge_cfg.endpoint,
+            deployment=judge_cfg.deployment,
+            api_version=judge_cfg.version_pin,
+            auth_method="api_key_header",
+            key_vault_secret_name="foundry-account-key",
+        ),
+    )
+
+    def _factory(name: str):
+        if name == "llm_judge_synthesis_quality":
+            return LLMJudgeEvaluator(binding=judge_binding, judge_candidate=judge_candidate)
+        return evaluator_registry.get(name)()
+
+    return _factory
 
 
 def _print_plan(config: ProductConfig, *, product: str, out: TextIO) -> None:

@@ -25,8 +25,9 @@ def test_rubric_parses_cleanly(real_rubric: Rubric) -> None:
     # MLI-272: weight contract is now "active partition sums to (0, 100]"
     # rather than "all dimensions sum to 100". Draft dimensions carry
     # weight 0 per the MLI-269 architectural-input. v0.1 active totals:
-    # tier_1=100 (5/5 active), tier_2=80 (5/7 active), tier_3=20 (2/7 active).
-    expected_active_totals = {"tier_1": 100, "tier_2": 80, "tier_3": 20}
+    # tier_1=100 (5/5 active), tier_2=80 (5/7 active), tier_3=45 (3/7 active,
+    # synthesis_quality activated in MFP-77).
+    expected_active_totals = {"tier_1": 100, "tier_2": 80, "tier_3": 45}
     for tier in real_rubric.tiers:
         active_total = sum(d.weight for d in tier.active_dimensions())
         assert active_total == expected_active_totals[tier.id], (
